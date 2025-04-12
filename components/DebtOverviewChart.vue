@@ -238,6 +238,11 @@ const upcomingDebts = computed(() => {
 
 <style scoped>
 .chart-container {
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -245,32 +250,32 @@ const upcomingDebts = computed(() => {
   margin-top: 20px;
 }
 
-h2, h3 {
-  margin-top: 0;
-  margin-bottom: 20px;
-  color: #333;
-}
-
 h2 {
-  text-align: center;
+  margin-top: 0;
+  margin-bottom: 16px;
   font-size: 18px;
+  color: #333;
+  font-weight: 600;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 h3 {
+  margin-top: 16px;
+  margin-bottom: 14px;
   font-size: 16px;
-  border-bottom: 1px solid #f0f0f0;
-  padding-bottom: 10px;
+  color: #333;
+  font-weight: 600;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-.loading-state, .empty-state {
-  text-align: center;
-  padding: 40px;
-  color: #757575;
+.loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
+  padding: 40px;
+  gap: 16px;
+  min-height: 340px;
 }
 
 .loading-spinner {
@@ -280,12 +285,15 @@ h3 {
   border-top: 4px solid #4CAF50;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-bottom: 16px;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  min-height: 340px;
 }
 
 .empty-icon {
@@ -493,5 +501,10 @@ h3 {
     margin-top: 5px;
     margin-left: 130px;
   }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style> 

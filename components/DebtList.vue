@@ -2,6 +2,30 @@
   <div class="debt-section">
     <h2 class="section-title">{{ sectionTitle }}</h2>
     
+    <!-- Thông báo khoản nợ đến hạn và quá hạn -->
+    <div v-if="hasNotifications" class="notification-container">
+      <div v-if="dueStatusCounts.overdue > 0" class="notification overdue">
+        <span class="notification-icon">⚠️</span>
+        <span class="notification-text">
+          <strong>{{ dueStatusCounts.overdue }}</strong> khoản nợ đã quá hạn và chưa thanh toán
+        </span>
+      </div>
+      
+      <div v-if="dueStatusCounts.dueToday > 0" class="notification due-today">
+        <span class="notification-icon">📅</span>
+        <span class="notification-text">
+          <strong>{{ dueStatusCounts.dueToday }}</strong> khoản nợ đến hạn hôm nay
+        </span>
+      </div>
+      
+      <div v-if="dueStatusCounts.dueSoon > 0" class="notification due-soon">
+        <span class="notification-icon">⏰</span>
+        <span class="notification-text">
+          <strong>{{ dueStatusCounts.dueSoon }}</strong> khoản nợ sẽ đến hạn trong 3 ngày tới
+        </span>
+      </div>
+    </div>
+    
     <!-- Bộ lọc theo tháng -->
     <div class="filter-controls">
       <div class="month-filter">
@@ -67,7 +91,10 @@
              :class="{ 
                'paid': isPaid(debt), 
                'recurring': debt.isRecurring,
-               'lent': debt.debtType === 'lent'
+               'lent': debt.debtType === 'lent',
+               'overdue': checkDueStatus(debt) === 'overdue',
+               'due-today': checkDueStatus(debt) === 'due-today',
+               'due-soon': checkDueStatus(debt) === 'due-soon'
              }">
           <div class="debt-info">
             <div class="debt-checkbox">
@@ -86,6 +113,15 @@
                 {{ debt.description }}
                 <span v-if="debt.isRecurring" class="recurring-badge" title="Khoản trả góp định kỳ">
                   <i>⟳</i>
+                </span>
+                <span v-if="checkDueStatus(debt) === 'overdue'" class="due-status-badge overdue" title="Đã quá hạn">
+                  ⚠️
+                </span>
+                <span v-else-if="checkDueStatus(debt) === 'due-today'" class="due-status-badge due-today" title="Đến hạn hôm nay">
+                  📅
+                </span>
+                <span v-else-if="checkDueStatus(debt) === 'due-soon'" class="due-status-badge due-soon" title="Sắp đến hạn">
+                  ⏰
                 </span>
               </div>
               <div class="debt-date">Đến hạn: {{ formatDate(debt.dueDate) }}</div>
@@ -802,6 +838,51 @@ const confirmToggleDebtStatus = async () => {
   await toggleDebtStatus(debtToToggle);
 };
 
+// Kiểm tra trạng thái hạn chót của khoản nợ
+const checkDueStatus = (debt) => {
+  if (isPaid(debt)) return 'paid'; // Nếu đã thanh toán, không cần cảnh báo
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Reset giờ về 00:00:00
+  
+  const dueDate = new Date(debt.dueDate);
+  dueDate.setHours(0, 0, 0, 0); // Reset giờ về 00:00:00
+  
+  const diffTime = dueDate - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) return 'overdue'; // Quá hạn
+  if (diffDays === 0) return 'due-today'; // Đến hạn hôm nay  
+  if (diffDays <= 3) return 'due-soon'; // Sắp đến hạn (còn 3 ngày hoặc ít hơn)
+  
+  return 'normal'; // Bình thường
+};
+
+// Tính toán số khoản nợ theo trạng thái
+const dueStatusCounts = computed(() => {
+  let result = {
+    overdue: 0,
+    dueToday: 0,
+    dueSoon: 0
+  };
+  
+  debts.value.forEach(debt => {
+    const status = checkDueStatus(debt);
+    if (status === 'overdue') result.overdue++;
+    if (status === 'due-today') result.dueToday++;
+    if (status === 'due-soon') result.dueSoon++;
+  });
+  
+  return result;
+});
+
+// Có thông báo nào không
+const hasNotifications = computed(() => {
+  return dueStatusCounts.value.overdue > 0 || 
+         dueStatusCounts.value.dueToday > 0 || 
+         dueStatusCounts.value.dueSoon > 0;
+});
+
 // Khởi tạo
 onMounted(async () => {
   if (user.value) {
@@ -1058,6 +1139,21 @@ function formatDateForInput(date) {
 .debt-item.lent {
   border-left: 3px solid #2196F3;
   padding-left: 8px;
+}
+
+.debt-item.overdue {
+  border-left: 3px solid #f44336;
+  background-color: #fff5f5;
+}
+
+.debt-item.due-today {
+  border-left: 3px solid #ffc107;
+  background-color: #fffbf0;
+}
+
+.debt-item.due-soon {
+  border-left: 3px solid #2196f3;
+  background-color: #f0f8ff;
 }
 
 .debt-info {
@@ -1464,5 +1560,72 @@ function formatDateForInput(date) {
 
 .expense-button:hover {
   background-color: #D32F2F;
+}
+
+/* Notification styles */
+.notification-container {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notification {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  gap: 10px;
+}
+
+.notification-icon {
+  font-size: 20px;
+}
+
+.notification.overdue {
+  background-color: #ffebee;
+  border-left: 4px solid #f44336;
+  color: #c62828;
+}
+
+.notification.due-today {
+  background-color: #fff8e1;
+  border-left: 4px solid #ffc107;
+  color: #ff8f00;
+}
+
+.notification.due-soon {
+  background-color: #e3f2fd;
+  border-left: 4px solid #2196f3;
+  color: #0d47a1;
+}
+
+/* Debt item due status */
+.debt-item.overdue {
+  border-left: 3px solid #f44336;
+  background-color: #fff5f5;
+}
+
+.debt-item.due-today {
+  border-left: 3px solid #ffc107;
+  background-color: #fffbf0;
+}
+
+.debt-item.due-soon {
+  border-left: 3px solid #2196f3;
+  background-color: #f0f8ff;
+}
+
+.due-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 14px;
 }
 </style> 
