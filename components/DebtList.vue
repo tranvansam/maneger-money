@@ -1,5 +1,11 @@
 <template>
   <div class="debt-section">
+    <!-- Add loading overlay -->
+    <div v-if="loading" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Đang xử lý...</div>
+    </div>
+    
     <h2 class="section-title">
       {{ props.filterType === 'owed' ? 'Quản lý nợ phải trả' : 'Quản lý cho vay' }}
       <button @click="openAddDebtModal" class="add-mobile-button">+</button>
@@ -997,18 +1003,7 @@ const addDebt = async () => {
     return;
   }
   
-  // Kiểm tra nếu là định kỳ thì phải có ngày kết thúc
-  if (newDebt.value.isRecurring && !newDebt.value.endDate) {
-    alert('Khoản nợ định kỳ cần có ngày kết thúc');
-    return;
-  }
-  
-  // Kiểm tra nếu là khoản trả góp định kỳ thì phải có tổng số tiền vay
-  if (newDebt.value.isRecurring && !newDebt.value.totalAmount) {
-    alert('Vui lòng nhập tổng số tiền vay cho khoản trả góp định kỳ');
-    return;
-  }
-  
+  loading.value = true;
   modalLoading.value = true;
   
   try {
@@ -1087,6 +1082,7 @@ const addDebt = async () => {
     console.error('Lỗi khi thêm khoản nợ:', error);
     alert(`Không thể thêm khoản nợ mới: ${error.message}`);
   } finally {
+    loading.value = false;
     modalLoading.value = false;
   }
 };
@@ -1098,6 +1094,7 @@ const toggleDebtStatus = async (debt) => {
     return;
   }
   
+  loading.value = true;
   try {
     console.log("Cập nhật trạng thái khoản nợ:", debt.id);
     const debtRef = doc(db, 'users', user.value.uid, 'debts', debt.id);
@@ -1168,6 +1165,8 @@ const toggleDebtStatus = async (debt) => {
   } catch (error) {
     console.error('Lỗi khi cập nhật trạng thái khoản nợ:', error);
     alert(`Không thể cập nhật trạng thái khoản nợ: ${error.message}`);
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -1293,6 +1292,7 @@ const confirmSettlement = async () => {
     return;
   }
 
+  loading.value = true;
   try {
     const debtRef = doc(db, 'users', user.value.uid, 'debts', selectedDebt.value.id);
     
@@ -1327,10 +1327,11 @@ const confirmSettlement = async () => {
     
     // Cập nhật lại danh sách
     await fetchDebts();
-
   } catch (error) {
     console.error('Error settling debt:', error);
     alert(`Không thể tất toán khoản nợ: ${error.message}`);
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -1488,8 +1489,9 @@ const saveEdit = async () => {
     return;
   }
 
+  loading.value = true;
+  modalLoading.value = true;
   try {
-    modalLoading.value = true;
     const debtRef = doc(db, 'users', user.value.uid, 'debts', editingDebt.value.id);
 
     const updateData = {
@@ -1514,6 +1516,7 @@ const saveEdit = async () => {
     console.error('Error updating debt:', error);
     alert(`Không thể cập nhật khoản nợ: ${error.message}`);
   } finally {
+    loading.value = false;
     modalLoading.value = false;
   }
 };
@@ -1528,9 +1531,9 @@ const deleteDebt = async () => {
     return;
   }
 
+  loading.value = true;
+  modalLoading.value = true;
   try {
-    modalLoading.value = true;
-    
     // 1. Xóa các giao dịch liên quan đến khoản nợ
     const transactionsRef = collection(db, 'users', user.value.uid, 'transactions');
     const q = query(transactionsRef, where('debtId', '==', editingDebt.value.id));
@@ -1558,6 +1561,7 @@ const deleteDebt = async () => {
     console.error('Error deleting debt:', error);
     alert(`Không thể xóa khoản nợ: ${error.message}`);
   } finally {
+    loading.value = false;
     modalLoading.value = false;
   }
 };
@@ -2808,5 +2812,42 @@ const deleteDebt = async () => {
     width: 100%;
     padding: 10px 16px;
   }
+}
+
+/* Add loading overlay styles */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  backdrop-filter: blur(3px);
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #4CAF50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+.loading-text {
+  font-size: 18px;
+  color: #333;
+  font-weight: 500;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style> 
