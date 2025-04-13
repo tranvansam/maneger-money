@@ -74,7 +74,11 @@
     </div>
     
     <div v-else-if="transactions.length === 0" class="empty-state">
-      Không có giao dịch nào trong khoảng thời gian này
+      <p>Không có giao dịch nào trong khoảng thời gian này</p>
+      <p class="date-range-info">Khoảng thời gian: {{ startDate }} đến {{ endDate }}</p>
+      <button @click="fetchTransactions" class="retry-button">
+        <span>⟳</span> Tải lại dữ liệu
+      </button>
     </div>
     
     <div v-else class="transactions-list">
@@ -93,7 +97,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onUnmounted, defineExpose } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted, defineExpose, nextTick } from 'vue';
 import { collection, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore';
 import { db, auth } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
@@ -275,19 +279,26 @@ const fetchTransactions = async () => {
   fetchError.value = null;
   
   try {
+    // Tạo đối tượng Date đúng cho ngày bắt đầu và kết thúc
     const start = new Date(startDate.value);
+    start.setHours(0, 0, 0, 0); // Đặt thời gian bắt đầu là đầu ngày
+    
     const end = new Date(endDate.value);
     end.setHours(23, 59, 59, 999); // Đặt thời gian kết thúc đến cuối ngày
     
-    console.log("Truy vấn Firestore từ", start, "đến", end);
+    console.log("Truy vấn Firestore từ", start.toISOString(), "đến", end.toISOString());
     
     let collectionPath = `users/${user.value.uid}/transactions`;
     console.log("Collection path:", collectionPath);
     
+    // Chuyển đổi đối tượng Date thành đối tượng Timestamp của Firestore
+    const startTimestamp = Timestamp.fromDate(start);
+    const endTimestamp = Timestamp.fromDate(end);
+    
     let q = query(
       collection(db, collectionPath),
-      where('date', '>=', start),
-      where('date', '<=', end),
+      where('date', '>=', startTimestamp),
+      where('date', '<=', endTimestamp),
       orderBy('date', 'desc')
     );
     
@@ -302,11 +313,16 @@ const fetchTransactions = async () => {
       let date;
       if (data.date instanceof Timestamp) {
         date = data.date.toDate();
-      } else if (data.date && data.date.seconds) {
-        // Xử lý trường hợp data.date là object có dạng Firestore Timestamp nhưng không phải instance của Timestamp
+      } else if (data.date && typeof data.date === 'object' && data.date.seconds) {
+        // Xử lý trường hợp data.date là object có dạng Firestore Timestamp
         date = new Date(data.date.seconds * 1000);
+      } else if (data.date instanceof Date) {
+        date = data.date;
+      } else if (data.date) {
+        // Xử lý trường hợp date là string hoặc số
+        date = new Date(data.date);
       } else {
-        date = new Date(data.date || Date.now());
+        date = new Date();
       }
       
       // Đảm bảo amount là một số
@@ -321,7 +337,11 @@ const fetchTransactions = async () => {
       const type = ['income', 'expense'].includes(data.type) ? data.type : 'expense';
       
       console.log(`Giao dịch [${doc.id}]: ${type}, ${amount}đ, ${date.toISOString()}`);
+      console.log(`  - Trong khoảng thời gian: ${date >= start && date <= end}`);
+      console.log(`  - So sánh ngày: ${date.getDate()}/${date.getMonth() + 1} với ${start.getDate()}/${start.getMonth() + 1} và ${end.getDate()}/${end.getMonth() + 1}`);
       
+      // Thêm vào kết quả mà không cần kiểm tra lại khoảng thời gian
+      // vì Firestore query đã xử lý điều này
       results.push({
         id: doc.id,
         ...data,
@@ -333,22 +353,15 @@ const fetchTransactions = async () => {
     
     // Lọc theo loại nếu cần
     if (transactionType.value !== 'all') {
+      const beforeCount = results.length;
       results = results.filter(t => t.type === transactionType.value);
-      console.log(`Đã lọc theo loại ${transactionType.value}, còn lại ${results.length} giao dịch`);
+      console.log(`Đã lọc theo loại ${transactionType.value}: ${beforeCount} -> ${results.length} giao dịch`);
     }
     
-    console.log("Tổng số giao dịch:", results.length);
-    // Tính toán tổng thu, chi chỉ khi có dữ liệu
-    if (results.length > 0) {
-      const incomeTotal = results.filter(t => t.type === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-      const expenseTotal = results.filter(t => t.type === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-      
-      console.log("Tổng thu:", incomeTotal);
-      console.log("Tổng chi:", expenseTotal);
-      console.log("Số dư:", incomeTotal - expenseTotal);
-    } else {
-      console.log("Không có giao dịch nào trong khoảng thời gian này");
-    }
+    console.log("Tổng số giao dịch sau khi lọc:", results.length);
+    
+    // Sắp xếp lại theo ngày mới nhất trước
+    results.sort((a, b) => b.date - a.date);
     
     // Cập nhật transactions chỉ khi cần thiết
     if (JSON.stringify(transactions.value) !== JSON.stringify(results)) {
@@ -376,9 +389,21 @@ const retryFetch = async () => {
 // Thêm các hàm lọc theo ngày/tháng hiện tại
 const resetToToday = () => {
   const today = new Date();
+  // Đảm bảo rằng chúng ta lấy ngày hiện tại đầy đủ
+  today.setHours(0, 0, 0, 0);
+  console.log("Đặt lại thành hôm nay:", today.toISOString());
+  
   startDate.value = formatDateForInput(today);
   endDate.value = formatDateForInput(today);
-  fetchTransactions();
+  
+  // Ghi log để debug
+  console.log("startDate:", startDate.value);
+  console.log("endDate:", endDate.value);
+  
+  // Đợi một tick trước khi fetch để đảm bảo giá trị đã được cập nhật
+  nextTick(() => {
+    fetchTransactions();
+  });
 };
 
 const resetToCurrentMonth = () => {
@@ -841,5 +866,40 @@ defineExpose({
     min-width: auto;
     font-size: 14px;
   }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 30px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  margin-top: 20px;
+  color: #757575;
+}
+
+.empty-state p {
+  margin: 8px 0;
+}
+
+.empty-state .date-range-info {
+  font-size: 14px;
+  color: #888;
+  margin: 10px 0;
+}
+
+.empty-state .retry-button {
+  margin-top: 15px;
+  background-color: #f5f5f5;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.empty-state .retry-button:hover {
+  background-color: #e0e0e0;
 }
 </style> 
