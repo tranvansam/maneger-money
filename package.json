@@ -10,6 +10,8 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@nuxtjs/pwa": "^3.3.5",
+    "@vite-pwa/nuxt": "^1.0.0",
     "chart.js": "^4.4.8",
     "chartjs-plugin-datalabels": "^2.2.0",
     "firebase": "11.6.0",
