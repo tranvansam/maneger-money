@@ -825,7 +825,9 @@ const fetchDebts = async () => {
 
   console.log('Fetching debts for user:', user.value.uid);
   loading.value = true;
+  // Clear existing debts before fetching
   debts.value = [];
+  const processedIds = new Set();
 
   try {
     const debtCollection = collection(db, `users/${user.value.uid}/debts`);
@@ -849,6 +851,20 @@ const fetchDebts = async () => {
 
       const regularDebts = await getDocs(debtQuery);
       
+      // Process regular debts
+      regularDebts.docs.forEach(doc => {
+        if (!processedIds.has(doc.id)) {
+          const debtData = doc.data();
+          debts.value.push({
+            id: doc.id,
+            ...debtData,
+            dueDate: debtData.dueDate?.toDate() || new Date(),
+            dueStatus: checkDueStatus(debtData)
+          });
+          processedIds.add(doc.id);
+        }
+      });
+
       // Then, get recurring debts that start before or during this month and end after or during this month
       const recurringQuery = query(
         debtCollection,
@@ -858,34 +874,26 @@ const fetchDebts = async () => {
 
       const recurringDebts = await getDocs(recurringQuery);
 
-      // Process regular debts
-      regularDebts.docs.forEach(doc => {
-        const debtData = doc.data();
-        debts.value.push({
-          id: doc.id,
-          ...debtData,
-          dueDate: debtData.dueDate?.toDate() || new Date(),
-          dueStatus: checkDueStatus(debtData)
-        });
-      });
-
       // Process recurring debts
       recurringDebts.docs.forEach(doc => {
-        const debtData = doc.data();
-        const startDate = debtData.dueDate?.toDate() || new Date();
-        const endDate = debtData.endDate?.toDate();
-        
-        // Check if this recurring debt should be shown for the selected month
-        if ((!endDate || endDate >= startOfMonth) && startDate <= endOfMonth) {
-          // Adjust the due date for this month
-          const monthlyDueDate = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), startDate.getDate());
+        if (!processedIds.has(doc.id)) {
+          const debtData = doc.data();
+          const startDate = debtData.dueDate?.toDate() || new Date();
+          const endDate = debtData.endDate?.toDate();
           
-          debts.value.push({
-            id: doc.id,
-            ...debtData,
-            dueDate: monthlyDueDate,
-            dueStatus: checkDueStatus({...debtData, dueDate: monthlyDueDate})
-          });
+          // Check if this recurring debt should be shown for the selected month
+          if ((!endDate || endDate >= startOfMonth) && startDate <= endOfMonth) {
+            // Adjust the due date for this month
+            const monthlyDueDate = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), startDate.getDate());
+            
+            debts.value.push({
+              id: doc.id,
+              ...debtData,
+              dueDate: monthlyDueDate,
+              dueStatus: checkDueStatus({...debtData, dueDate: monthlyDueDate})
+            });
+            processedIds.add(doc.id);
+          }
         }
       });
     } else {
@@ -898,13 +906,16 @@ const fetchDebts = async () => {
 
       const querySnapshot = await getDocs(debtQuery);
       querySnapshot.docs.forEach(doc => {
-        const debtData = doc.data();
-        debts.value.push({
-          id: doc.id,
-          ...debtData,
-          dueDate: debtData.dueDate?.toDate() || new Date(),
-          dueStatus: checkDueStatus(debtData)
-        });
+        if (!processedIds.has(doc.id)) {
+          const debtData = doc.data();
+          debts.value.push({
+            id: doc.id,
+            ...debtData,
+            dueDate: debtData.dueDate?.toDate() || new Date(),
+            dueStatus: checkDueStatus(debtData)
+          });
+          processedIds.add(doc.id);
+        }
       });
     }
     
@@ -918,10 +929,7 @@ const fetchDebts = async () => {
       return a.dueDate - b.dueDate;
     });
     
-    console.log('Total debts loaded:', debts.value.length);
-    console.log('Total amount calculated:', totalDebtAmount.value);
-    console.log('Paid amount calculated:', totalPaidAmount.value);
-    console.log('Remaining amount calculated:', remainingAmount.value);
+    console.log('Total unique debts loaded:', debts.value.length);
     
   } catch (error) {
     console.error('Error fetching debts:', error);
@@ -1194,26 +1202,47 @@ const isSameDay = (date1, date2) => {
 
 // Khởi tạo
 onMounted(async () => {
+  console.log('DebtList mounted');
   if (user.value) {
     resetNewDebt();
+    // Chỉ gọi fetchDebts một lần khi mount
     await fetchDebts();
   }
 });
 
-// Watch khi filterType thay đổi
-watch(() => props.filterType, async (newFilterType) => {
-  console.log("Filter type changed to:", newFilterType);
-  resetNewDebt();
-  await fetchDebts();
-});
-
-// Watch khi user thay đổi
-watch(user, async (newUser) => {
-  if (newUser) {
+// Watch khi filterType thay đổi - thêm immediate: false để tránh gọi ngay lập tức
+watch(() => props.filterType, async (newFilterType, oldFilterType) => {
+  console.log("Filter type changed from:", oldFilterType, "to:", newFilterType);
+  if (oldFilterType !== newFilterType) { // Chỉ gọi khi thực sự có thay đổi
     resetNewDebt();
     await fetchDebts();
   }
-});
+}, { immediate: false });
+
+// Watch khi user thay đổi - thêm immediate: false
+watch(user, async (newUser, oldUser) => {
+  console.log("User changed");
+  if (newUser && newUser.uid !== oldUser?.uid) { // Chỉ gọi khi user thực sự thay đổi
+    resetNewDebt();
+    await fetchDebts();
+  }
+}, { immediate: false });
+
+// Watch cho selectedMonth - thêm điều kiện để tránh gọi không cần thiết
+watch(selectedMonth, async (newMonth, oldMonth) => {
+  console.log("Selected month changed");
+  if (newMonth.getTime() !== oldMonth.getTime()) { // Chỉ gọi khi tháng thực sự thay đổi
+    await fetchDebts();
+  }
+}, { immediate: false });
+
+// Watch cho showTotalAmounts - thêm điều kiện
+watch(showTotalAmounts, async (newValue, oldValue) => {
+  console.log("Show total amounts changed");
+  if (newValue !== oldValue) { // Chỉ gọi khi giá trị thực sự thay đổi
+    await fetchDebts();
+  }
+}, { immediate: false });
 
 // Khi component unmount, reset state
 onUnmounted(() => {
