@@ -1,87 +1,95 @@
 <template>
   <div class="debt-section">
-    <h2 class="section-title">{{ sectionTitle }}</h2>
+    <h2 class="section-title">
+      {{ props.filterType === 'owed' ? 'Quản lý nợ phải trả' : 'Quản lý cho vay' }}
+      <button @click="openAddDebtModal" class="add-mobile-button">+</button>
+    </h2>
     
-    <!-- Thông báo khoản nợ đến hạn và quá hạn -->
-    <div v-if="hasNotifications" class="notification-container">
+    <!-- Notifications Section -->
+    <div v-if="hasNotifications" class="debt-notifications" style="margin-bottom: 20px;">
       <div v-if="dueStatusCounts.overdue > 0" class="notification overdue">
-        <span class="notification-icon">⚠️</span>
-        <span class="notification-text">
-          <strong>{{ dueStatusCounts.overdue }}</strong> khoản nợ đã quá hạn và chưa thanh toán
-        </span>
+        <i class="fas fa-exclamation-circle"></i>
+        {{ dueStatusCounts.overdue }} khoản {{ props.filterType === 'owed' ? 'nợ đã quá hạn' : 'cho vay đã quá hạn' }}
       </div>
-      
       <div v-if="dueStatusCounts.dueToday > 0" class="notification due-today">
-        <span class="notification-icon">📅</span>
-        <span class="notification-text">
-          <strong>{{ dueStatusCounts.dueToday }}</strong> khoản nợ đến hạn hôm nay
-        </span>
+        <i class="fas fa-calendar-day"></i>
+        {{ dueStatusCounts.dueToday }} khoản {{ props.filterType === 'owed' ? 'nợ đến hạn' : 'cho vay đến hạn' }} hôm nay
+      </div>
+      <div v-if="dueStatusCounts.dueSoon > 0" class="notification due-soon">
+        <i class="fas fa-clock"></i>
+        {{ dueStatusCounts.dueSoon }} khoản {{ props.filterType === 'owed' ? 'nợ sắp đến hạn' : 'cho vay sắp đến hạn' }}
+      </div>
+    </div>
+    
+    <!-- Filter and Controls -->
+    <div class="control-bar">
+      <div v-if="!showTotalAmounts" class="month-filter">
+        <button @click="previousMonth" class="month-nav-button prev-month">
+          <span class="sr-only">Tháng trước</span>
+        </button>
+        <span class="current-month">{{ formatMonthYear(selectedMonth) }}</span>
+        <button @click="nextMonth" class="month-nav-button next-month">
+          <span class="sr-only">Tháng sau</span>
+        </button>
+      </div>
+      <div v-else class="total-view-label">
+        <span class="total-view-text">Tổng hợp tất cả khoản nợ</span>
       </div>
       
-      <div v-if="dueStatusCounts.dueSoon > 0" class="notification due-soon">
-        <span class="notification-icon">⏰</span>
-        <span class="notification-text">
-          <strong>{{ dueStatusCounts.dueSoon }}</strong> khoản nợ sẽ đến hạn trong 3 ngày tới
-        </span>
+      <div class="control-buttons">
+        <button @click="toggleTotalView" class="toggle-view-button">
+          <i class="fas" :class="showTotalAmounts ? 'fa-calendar-alt' : 'fa-chart-bar'"></i>
+          {{ showTotalAmounts ? 'Xem theo tháng' : 'Xem tổng nợ' }}
+        </button>
+        
+        <button @click="openAddDebtModal" class="add-button">
+          <i class="fas fa-plus"></i> Thêm {{ props.filterType === 'owed' ? 'khoản nợ' : 'khoản cho vay' }}
+        </button>
       </div>
     </div>
     
-    <!-- Bộ lọc theo tháng -->
-    <div class="filter-controls">
-      <div class="month-filter">
-        <button 
-          @click="previousMonth" 
-          class="month-nav-button"
-          title="Tháng trước"
-        >&lt;</button>
-        <span class="current-month">{{ displayMonth }}</span>
-        <button 
-          @click="nextMonth" 
-          class="month-nav-button"
-          title="Tháng sau"
-        >&gt;</button>
-      </div>
-    </div>
-    
+    <!-- Loading and Empty States -->
     <div v-if="loading" class="loading-state">
-      Đang tải dữ liệu...
+      <i class="fas fa-spinner fa-spin"></i> Đang tải...
     </div>
     
     <div v-else-if="debts.length === 0" class="empty-state">
-      <span v-if="props.filterType === 'owed'">Không có khoản nợ nào trong tháng này</span>
-      <span v-else-if="props.filterType === 'lent'">Không có khoản cho mượn nào trong tháng này</span>
-      <span v-else>Không có khoản nợ nào trong tháng này</span>
-      <button @click="showAddDebtModal = true" class="add-small-button">
-        <span v-if="props.filterType === 'lent'">Thêm khoản cho mượn</span>
-        <span v-else>Thêm khoản nợ</span>
-      </button>
+      <div class="empty-state-icon">{{ showTotalAmounts ? '📊' : '📅' }}</div>
+      <p v-if="showTotalAmounts">
+        Không có {{ props.filterType === 'owed' ? 'khoản nợ' : 'khoản cho vay' }} nào.
+        Thêm mới để theo dõi các khoản {{ props.filterType === 'owed' ? 'nợ' : 'cho vay' }}.
+      </p>
+      <p v-else>
+        Không có {{ props.filterType === 'owed' ? 'khoản nợ' : 'khoản cho vay' }} nào 
+        trong tháng {{ selectedMonth.getMonth() + 1 }}/{{ selectedMonth.getFullYear() }}
+      </p>
     </div>
     
-    <div v-else>
-      <div class="debt-header">
-        <div class="debt-actions">
-          <button @click="showAddDebtModal = true" class="add-debt-button">
-            <span>+</span> 
-            <span v-if="props.filterType === 'lent'">Thêm khoản cho mượn</span>
-            <span v-else>Thêm khoản nợ</span>
-          </button>
+    <!-- Debt Summary -->
+    <div v-else class="debts-container">
+      <div class="debts-summary">
+        <div class="summary-item total">
+          <div class="summary-label">
+            <i class="fas fa-calculator"></i>
+            {{ props.filterType === 'owed' ? 'Nợ tháng này' : 'Cho vay tháng này' }}
+          </div>
+          <div class="summary-value">{{ formatCurrency(totalDebtAmount) }}</div>
         </div>
         
-        <div class="debt-summary">
-          <div class="summary-item">
-            <span v-if="props.filterType === 'lent'">Tổng cho mượn:</span>
-            <span v-else>Tổng nợ:</span>
-            <span class="expense">{{ formatCurrency(totalDebt) }}</span>
+        <div class="summary-item paid">
+          <div class="summary-label">
+            <i class="fas fa-check-circle"></i>
+            {{ props.filterType === 'owed' ? 'Đã trả tháng này' : 'Đã thu tháng này' }}
           </div>
-          <div class="summary-item">
-            <span v-if="props.filterType === 'lent'">Đã thu hồi:</span>
-            <span v-else>Đã trả:</span>
-            <span class="income">{{ formatCurrency(paidDebt) }}</span>
+          <div class="summary-value">{{ formatCurrency(totalPaidAmount) }}</div>
+        </div>
+        
+        <div class="summary-item remaining">
+          <div class="summary-label">
+            <i class="fas fa-exclamation-circle"></i>
+            {{ props.filterType === 'owed' ? 'Còn nợ tháng này' : 'Chưa thu tháng này' }}
           </div>
-          <div class="summary-item">
-            <span>Còn lại:</span>
-            <span class="expense">{{ formatCurrency(remainingDebt) }}</span>
-          </div>
+          <div class="summary-value">{{ formatCurrency(remainingAmount) }}</div>
         </div>
       </div>
       
@@ -108,7 +116,7 @@
             </div>
             <div class="debt-details">
               <div class="debt-description">
-                <span v-if="debt.debtType === 'lent'" class="debt-type-tag lent-tag">Cho mượn</span>
+                <span v-if="debt.debtType === 'lent'" class="debt-type-tag lent-tag">Cho vay</span>
                 <span v-else class="debt-type-tag owed-tag">Nợ</span>
                 {{ debt.description }}
                 <span v-if="debt.isRecurring" class="recurring-badge" title="Khoản trả góp định kỳ">
@@ -128,7 +136,7 @@
               <div v-if="debt.isRecurring && debt.endDate" class="debt-end-date">
                 Kết thúc: {{ formatDate(debt.endDate) }}
               </div>
-              <div class="debt-creditor">{{ debt.debtType === 'lent' ? 'Người mượn' : 'Chủ nợ' }}: {{ debt.creditor }}</div>
+              <div class="debt-creditor">{{ debt.debtType === 'lent' ? 'Người vay' : 'Chủ nợ' }}: {{ debt.creditor }}</div>
               <div v-if="debt.isRecurring && debt.totalAmount" class="debt-total-amount">
                 Tổng khoản vay: <span class="total-amount-value">{{ formatCurrency(debt.totalAmount) }}</span>
               </div>
@@ -139,8 +147,13 @@
               {{ debt.debtType === 'lent' ? 'Đã thu' : 'Đã trả' }}
             </div>
             <div class="debt-amount" :class="{'lent-amount': debt.debtType === 'lent'}">
-              {{ formatCurrency(debt.amount) }}
-              <div v-if="debt.isRecurring" class="monthly-label">hàng tháng</div>
+              {{ showTotalAmounts && debt.isRecurring ? formatCurrency(debt.totalAmount || debt.amount) : formatCurrency(debt.amount) }}
+              <span v-if="debt.isRecurring && showTotalAmounts" class="debt-total-note">
+                ({{ formatCurrency(debt.amount) }}/tháng)
+              </span>
+              <span v-else-if="debt.isRecurring && !showTotalAmounts" class="debt-total-note">
+                (Tổng: {{ formatCurrency(debt.totalAmount || debt.amount) }})
+              </span>
             </div>
           </div>
         </div>
@@ -151,7 +164,7 @@
     <div v-if="showAddDebtModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h2 v-if="newDebt.debtType === 'lent'">Thêm khoản cho mượn</h2>
+          <h2 v-if="newDebt.debtType === 'lent'">Thêm khoản cho vay</h2>
           <h2 v-else>Thêm khoản nợ</h2>
           <button @click="showAddDebtModal = false" class="close-button">&times;</button>
         </div>
@@ -175,7 +188,7 @@
                   @click="newDebt.debtType = 'lent'"
                 >
                   <span class="debt-type-icon">💰</span>
-                  <span class="debt-type-text">Tôi cho mượn</span>
+                  <span class="debt-type-text">Tôi cho vay</span>
                 </div>
               </div>
             </div>
@@ -232,8 +245,8 @@
             </div>
             
             <div class="form-group">
-              <label>{{ newDebt.debtType === 'lent' ? 'Người mượn' : 'Chủ nợ' }}</label>
-              <input type="text" v-model="newDebt.creditor" :placeholder="newDebt.debtType === 'lent' ? 'Tên người mượn tiền' : 'Tên người/tổ chức cho vay'" />
+              <label>{{ newDebt.debtType === 'lent' ? 'Người vay' : 'Chủ nợ' }}</label>
+              <input type="text" v-model="newDebt.creditor" :placeholder="newDebt.debtType === 'lent' ? 'Tên người vay tiền' : 'Tên người/tổ chức cho vay'" />
             </div>
             
             <div class="form-group">
@@ -246,7 +259,7 @@
         <div class="form-actions">
           <button type="button" @click="showAddDebtModal = false" class="cancel-button">Hủy</button>
           <button type="submit" @click="addDebt" class="submit-button" :disabled="modalLoading">
-            {{ modalLoading ? 'Đang xử lý...' : (newDebt.debtType === 'lent' ? 'Lưu khoản cho mượn' : 'Lưu khoản nợ') }}
+            {{ modalLoading ? 'Đang xử lý...' : (newDebt.debtType === 'lent' ? 'Lưu khoản cho vay' : 'Lưu khoản nợ') }}
           </button>
         </div>
       </div>
@@ -315,12 +328,16 @@ const props = defineProps({
 const emit = defineEmits(['debt-toggled', 'debt-added']);
 
 const { user } = useAuth();
-const loading = ref(false);
+const loading = ref(true);
 const modalLoading = ref(false);
 const debts = ref([]);
 const showAddDebtModal = ref(false);
 const showConfirmModal = ref(false);
 const selectedDebt = ref(null);
+const showTotalAmounts = ref(false);
+const editingDebt = ref(null);
+const showStatusModal = ref(false);
+const currentDebtForStatus = ref(null);
 
 // Format hiển thị số tiền
 const formatCurrency = (amount) => {
@@ -431,9 +448,54 @@ const validateTotalAmount = () => {
   }
 };
 
-// Tính toán tổng nợ
+// Computed properties
 const totalDebt = computed(() => {
-  return debts.value.reduce((sum, debt) => sum + (parseFloat(debt.amount) || 0), 0);
+  if (showTotalAmounts.value) {
+    // For total view, sum all debt amounts (or totalAmount for recurring debts)
+    return debts.value.reduce((sum, debt) => {
+      return sum + (debt.isRecurring ? (debt.totalAmount || debt.amount) : debt.amount || 0);
+    }, 0);
+  } else {
+    // For monthly view, sum monthly amounts
+    return debts.value.reduce((sum, debt) => sum + (debt.amount || 0), 0);
+  }
+});
+
+const totalDebtAmount = computed(() => {
+  return totalDebt.value;
+});
+
+const totalPaidAmount = computed(() => {
+  if (showTotalAmounts.value) {
+    // For total view, sum all paid amounts across all debts
+    return debts.value.reduce((sum, debt) => {
+      if (debt.isRecurring) {
+        // For recurring debts, count sum of all monthly payments
+        const paidMonths = debt.paidMonths || {};
+        const paidMonthsCount = Object.values(paidMonths).filter(Boolean).length;
+        return sum + (paidMonthsCount * debt.amount);
+      } else {
+        // For regular debts, add if paid
+        return sum + (debt.paid ? debt.amount : 0);
+      }
+    }, 0);
+  } else {
+    // For monthly view, only count payments for the current month
+    const currentMonthKey = getMonthKey(selectedMonth.value);
+    return debts.value.reduce((sum, debt) => {
+      if (debt.isRecurring) {
+        // For recurring debts, check if current month is paid
+        return sum + ((debt.paidMonths && debt.paidMonths[currentMonthKey]) ? debt.amount : 0);
+      } else {
+        // For regular debts, add if paid
+        return sum + (debt.paid ? debt.amount : 0);
+      }
+    }, 0);
+  }
+});
+
+const remainingAmount = computed(() => {
+  return totalDebt.value - totalPaidAmount.value;
 });
 
 // Hàm kiểm tra trạng thái đã thanh toán, xét cả trường hợp khoản nợ định kỳ
@@ -445,16 +507,9 @@ const isPaid = (debt) => {
   return debt.paid;
 };
 
-// Sửa cách tính toán tổng tiền đã trả và còn lại
-const paidDebt = computed(() => {
-  return debts.value
-    .filter(debt => isPaid(debt))
-    .reduce((sum, debt) => sum + (parseFloat(debt.amount) || 0), 0);
-});
-
 // Tính toán số nợ còn lại
 const remainingDebt = computed(() => {
-  return totalDebt.value - paidDebt.value;
+  return totalDebt.value - totalPaidAmount.value;
 });
 
 // Tạo key tháng-năm cho việc đánh dấu thanh toán
@@ -498,134 +553,115 @@ const resetNewDebt = () => {
 
 // Lấy danh sách nợ
 const fetchDebts = async () => {
-  if (!user.value || !user.value.uid) {
-    console.log("Không thể lấy danh sách nợ: User chưa được xác thực");
+  if (!user.value) {
+    console.log('No user logged in, skipping debt fetch');
+    loading.value = false;
     return;
   }
-  
+
+  console.log('Fetching debts for user:', user.value.uid);
   loading.value = true;
-  
+  debts.value = [];
+
   try {
-    // Lấy khoảng thời gian của tháng đã chọn
-    const firstDayOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), 1);
-    const lastDayOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth() + 1, 0, 23, 59, 59);
-    
-    console.log("Lấy danh sách nợ của user:", user.value.uid);
-    console.log("Tháng đã chọn:", `${selectedMonth.value.getMonth() + 1}/${selectedMonth.value.getFullYear()}`);
-    console.log("Lọc theo loại:", props.filterType || "Tất cả");
-    
-    try {
-      // Tạo Map để tránh trùng lặp
-      const debtMap = new Map();
+    const debtCollection = collection(db, `users/${user.value.uid}/debts`);
+    let debtQuery;
+
+    if (!showTotalAmounts.value) {
+      // For monthly view, we need to handle both regular and recurring debts
+      const startOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), 1);
+      const endOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth() + 1, 0, 23, 59, 59);
       
-      // Truy vấn cơ bản
-      let baseQuery = query(
-        collection(db, 'users', user.value.uid, 'debts')
+      console.log('Fetching debts for month:', startOfMonth, 'to', endOfMonth);
+      
+      // First, get regular debts for this month
+      debtQuery = query(
+        debtCollection,
+        where('debtType', '==', props.filterType),
+        where('isRecurring', '==', false),
+        where('dueDate', '>=', Timestamp.fromDate(startOfMonth)),
+        where('dueDate', '<=', Timestamp.fromDate(endOfMonth))
       );
+
+      const regularDebts = await getDocs(debtQuery);
       
-      // Truy vấn lọc theo loại nợ (nếu có)
-      let typeFilteredQuery = baseQuery;
-      if (props.filterType === 'owed' || props.filterType === 'lent') {
-        typeFilteredQuery = query(
-          baseQuery,
-          where('debtType', '==', props.filterType)
-        );
-      }
-      
-      // Truy vấn 1: Lấy khoản nợ có ngày đến hạn trong tháng đã chọn
-      let q1 = query(
-        typeFilteredQuery,
-        where('dueDate', '>=', Timestamp.fromDate(firstDayOfMonth)),
-        where('dueDate', '<=', Timestamp.fromDate(lastDayOfMonth)),
-        orderBy('dueDate', 'asc')
+      // Then, get recurring debts that start before or during this month and end after or during this month
+      const recurringQuery = query(
+        debtCollection,
+        where('debtType', '==', props.filterType),
+        where('isRecurring', '==', true)
       );
-      
-      const querySnapshot1 = await getDocs(q1);
-      
-      // Xử lý khoản nợ thông thường
-      querySnapshot1.forEach((doc) => {
-        const data = doc.data();
-        // Đảm bảo dueDate là đối tượng Date
-        const dueDate = data.dueDate instanceof Timestamp ? data.dueDate.toDate() : new Date(data.dueDate);
-        const endDate = data.endDate instanceof Timestamp ? data.endDate.toDate() : 
-                        data.endDate ? new Date(data.endDate) : null;
-        
-        debtMap.set(doc.id, {
+
+      const recurringDebts = await getDocs(recurringQuery);
+
+      // Process regular debts
+      regularDebts.docs.forEach(doc => {
+        const debtData = doc.data();
+        debts.value.push({
           id: doc.id,
-          ...data,
-          dueDate: dueDate,
-          endDate: endDate
+          ...debtData,
+          dueDate: debtData.dueDate?.toDate() || new Date(),
+          dueStatus: checkDueStatus(debtData)
         });
       });
-      
-      // Truy vấn 2: Lấy tất cả khoản nợ định kỳ và lọc ở client
-      let q2 = typeFilteredQuery;
-      
-      if (props.filterType) {
-        q2 = query(
-          q2,
-          where('isRecurring', '==', true)
-        );
-      } else {
-        q2 = query(
-          q2,
-          where('isRecurring', '==', true)
-        );
-      }
-      
-      const querySnapshot2 = await getDocs(q2);
-      
-      // Xử lý khoản nợ định kỳ
-      querySnapshot2.forEach((doc) => {
-        if (!debtMap.has(doc.id)) {
-          const data = doc.data();
-          const originalDueDate = data.dueDate instanceof Timestamp ? data.dueDate.toDate() : new Date(data.dueDate);
-          const endDate = data.endDate instanceof Timestamp ? data.endDate.toDate() : 
-                          data.endDate ? new Date(data.endDate) : null;
+
+      // Process recurring debts
+      recurringDebts.docs.forEach(doc => {
+        const debtData = doc.data();
+        const startDate = debtData.dueDate?.toDate() || new Date();
+        const endDate = debtData.endDate?.toDate();
+        
+        // Check if this recurring debt should be shown for the selected month
+        if ((!endDate || endDate >= startOfMonth) && startDate <= endOfMonth) {
+          // Adjust the due date for this month
+          const monthlyDueDate = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), startDate.getDate());
           
-          // Bỏ qua các khoản nợ định kỳ đã kết thúc
-          if (!endDate || endDate < firstDayOfMonth) {
-            return;
-          }
-          
-          // Tính toán đến hạn trong tháng hiện tại (giữ nguyên ngày, chỉ thay đổi tháng/năm)
-          let currentDueDate = new Date(originalDueDate);
-          
-          // Điều chỉnh ngày đến hạn để phù hợp với tháng được chọn
-          while (currentDueDate < firstDayOfMonth && currentDueDate < endDate) {
-            currentDueDate.setMonth(currentDueDate.getMonth() + 1);
-          }
-          
-          // Nếu ngày đến hạn trong tháng này và chưa quá ngày kết thúc
-          if (currentDueDate >= firstDayOfMonth && 
-              currentDueDate <= lastDayOfMonth && 
-              currentDueDate <= endDate) {
-                
-            // Đảm bảo paidMonths tồn tại
-            const paidMonths = data.paidMonths || {};
-            
-            debtMap.set(doc.id, {
-              id: doc.id,
-              ...data,
-              dueDate: currentDueDate,
-              endDate: endDate,
-              paidMonths: paidMonths
-            });
-          }
+          debts.value.push({
+            id: doc.id,
+            ...debtData,
+            dueDate: monthlyDueDate,
+            dueStatus: checkDueStatus({...debtData, dueDate: monthlyDueDate})
+          });
         }
       });
-      
-      // Chuyển Map thành mảng và sắp xếp theo ngày đến hạn
-      const results = Array.from(debtMap.values())
-        .sort((a, b) => a.dueDate - b.dueDate);
-      
-      console.log("Tổng số khoản nợ:", results.length);
-      debts.value = results;
-    } catch (error) {
-      console.error('Lỗi truy vấn Firestore:', error);
+    } else {
+      // For total view, get all debts of the specified type regardless of date
+      console.log('Fetching all debts of type:', props.filterType);
+      debtQuery = query(
+        debtCollection,
+        where('debtType', '==', props.filterType)
+      );
+
+      const querySnapshot = await getDocs(debtQuery);
+      querySnapshot.docs.forEach(doc => {
+        const debtData = doc.data();
+        debts.value.push({
+          id: doc.id,
+          ...debtData,
+          dueDate: debtData.dueDate?.toDate() || new Date(),
+          dueStatus: checkDueStatus(debtData)
+        });
+      });
     }
+    
+    // Sort debts by dueDate
+    debts.value.sort((a, b) => {
+      // In total view, sort recurring debts first, then by due date
+      if (showTotalAmounts.value) {
+        if (a.isRecurring && !b.isRecurring) return -1;
+        if (!a.isRecurring && b.isRecurring) return 1;
+      }
+      return a.dueDate - b.dueDate;
+    });
+    
+    console.log('Total debts loaded:', debts.value.length);
+    console.log('Total amount calculated:', totalDebtAmount.value);
+    console.log('Paid amount calculated:', totalPaidAmount.value);
+    console.log('Remaining amount calculated:', remainingAmount.value);
+    
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách nợ:', error);
+    console.error('Error fetching debts:', error);
+    alert('Lỗi tải dữ liệu: ' + error.message);
   } finally {
     loading.value = false;
   }
@@ -883,6 +919,15 @@ const hasNotifications = computed(() => {
          dueStatusCounts.value.dueSoon > 0;
 });
 
+// Function to check if two dates are the same day
+const isSameDay = (date1, date2) => {
+  date1 = new Date(date1);
+  date2 = new Date(date2);
+  return date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate();
+};
+
 // Khởi tạo
 onMounted(async () => {
   if (user.value) {
@@ -923,6 +968,28 @@ function formatDateForInput(date) {
 
   return [year, month, day].join('-');
 }
+
+// Toggle between showing monthly amounts and total amounts
+const toggleTotalView = () => {
+  showTotalAmounts.value = !showTotalAmounts.value;
+  console.log('Toggled total view:', showTotalAmounts.value);
+  // Refresh debts with the new view setting
+  fetchDebts();
+};
+
+// Format month and year for display
+const formatMonthYear = (date) => {
+  const months = [
+    'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 
+    'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+  ];
+  return `${months[date.getMonth()]} ${date.getFullYear()}`;
+};
+
+// Function to open add debt modal
+const openAddDebtModal = () => {
+  showAddDebtModal.value = true;
+};
 </script>
 
 <style scoped>
@@ -935,17 +1002,39 @@ function formatDateForInput(date) {
 }
 
 .section-title {
-  font-size: 20px;
-  color: #333;
-  border-left: 4px solid #4CAF50;
-  padding-left: 10px;
-  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
 }
 
-.filter-controls {
+.add-mobile-button {
+  display: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.add-mobile-button:hover {
+  background-color: #45a049;
+}
+
+.control-bar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 20px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .month-filter {
@@ -953,207 +1042,201 @@ function formatDateForInput(date) {
   align-items: center;
   gap: 10px;
   background-color: #f9f9f9;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
   border: 1px solid #eee;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .month-nav-button {
-  background: none;
+  width: 28px;
+  height: 28px;
   border: none;
-  font-size: 18px;
-  color: #555;
+  background-color: transparent;
   cursor: pointer;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
+  position: relative;
 }
 
-.month-nav-button:hover {
-  background-color: #e9e9e9;
+.month-nav-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-style: solid;
+  border-width: 2px 2px 0 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.prev-month::before {
+  transform: translate(-25%, -50%) rotate(-135deg);
+}
+
+.next-month::before {
+  transform: translate(-75%, -50%) rotate(45deg);
 }
 
 .current-month {
   font-weight: 500;
+  padding: 0 0.5rem;
   min-width: 120px;
   text-align: center;
 }
 
-.recurring-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 8px;
-  color: #4CAF50;
-  background-color: rgba(76, 175, 80, 0.1);
-  border-radius: 50%;
-  width: 18px;
-  height: 18px;
-  font-size: 14px;
-}
-
-.debt-end-date {
-  color: #757575;
-  font-size: 14px;
-}
-
-.checkbox-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.checkbox-wrapper input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  accent-color: #4CAF50;
-}
-
-.recurring-group {
-  border: 1px solid #eee;
-  padding: 12px;
-  border-radius: 6px;
-  background-color: #fafafa;
-}
-
-.recurring-options {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed #ddd;
-}
-
-.loading-state, .empty-state {
-  text-align: center;
-  padding: 20px;
-  color: #757575;
-  font-size: 15px;
-}
-
-.add-small-button {
-  display: inline-block;
-  margin-top: 10px;
-  padding: 8px 16px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.debt-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.debt-actions {
+.control-buttons {
   display: flex;
   gap: 10px;
 }
 
-.add-debt-button {
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 10px 16px;
-  cursor: pointer;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.add-button {
+    outline: none;
+    border-radius: 20px;
+    border: none;
+    background-color: #05cb0f;
+    color: white;
+    padding: 15px;
+    cursor: pointer;
+}
+@media (max-width: 768px) {
+  .section-title {
+    margin-bottom: 16px;
+  }
+  
+  .section-title .add-mobile-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .control-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .month-filter {
+    flex: 1;
+    padding: 6px 12px;
+    min-width: 200px;
+  }
+  
+  .control-buttons {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  
+  .toggle-view-button {
+    padding: 8px 12px;
+    font-size: 14px;
+    width: 100%;
+  }
+  
+  .current-month {
+    min-width: 100px;
+    font-size: 14px;
+  }
+  
+  .add-button {
+    display: none !important;
+    outline: none;
+    border-radius: 20px;
+    border: none;
+    background-color: #2E7D32;
+    color: white;
+  }
 }
 
-.add-debt-button:hover {
-  background-color: #388E3C;
-}
-
-.debt-summary {
-  display: flex;
-  gap: 16px;
-  background-color: #f9f9f9;
-  padding: 10px 16px;
-  border-radius: 6px;
-}
-
-.summary-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: center;
-  font-weight: 500;
-}
-
-.summary-item span:first-child {
-  font-size: 14px;
-  color: #555;
-}
-
-.summary-item span:last-child {
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.income {
-  color: #4CAF50;
-}
-
-.expense {
-  color: #F44336;
+@media (max-width: 480px) {
+  .control-bar {
+    gap: 8px;
+  }
+  
+  .month-filter {
+    padding: 4px 10px;
+    min-width: 150px;
+  }
+  
+  .toggle-view-button {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+  
+  .current-month {
+    min-width: 90px;
+    font-size: 13px;
+  }
 }
 
 .debt-list {
   margin-top: 16px;
   border-top: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
 .debt-item {
   display: flex;
   justify-content: space-between;
-  padding: 16px 0;
+  padding: 18px 16px;
   border-bottom: 1px solid #eee;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
+  background-color: white;
 }
 
 .debt-item:hover {
   background-color: #f9f9f9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+  z-index: 1;
+  position: relative;
 }
 
 .debt-item.paid {
-  background-color: #f0fff0;
+  background-color: #f8fff8;
 }
 
 .debt-item.recurring {
   border-left: 3px solid #4CAF50;
-  padding-left: 8px;
+  padding-left: 16px;
 }
 
 .debt-item.lent {
   border-left: 3px solid #2196F3;
-  padding-left: 8px;
+  padding-left: 16px;
 }
 
 .debt-item.overdue {
   border-left: 3px solid #f44336;
-  background-color: #fff5f5;
+  background-color: #fff8f8;
 }
 
 .debt-item.due-today {
   border-left: 3px solid #ffc107;
-  background-color: #fffbf0;
+  background-color: #fffcf0;
 }
 
 .debt-item.due-soon {
   border-left: 3px solid #2196f3;
   background-color: #f0f8ff;
+}
+
+.debt-item:last-child {
+  border-bottom: none;
+  border-radius: 0 0 8px 8px;
 }
 
 .debt-info {
@@ -1170,21 +1253,29 @@ function formatDateForInput(date) {
 }
 
 .debt-checkbox input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   cursor: pointer;
   accent-color: #4CAF50;
+  border-radius: 4px;
+  transition: all 0.2s;
 }
 
-.debt-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.debt-checkbox input[type="checkbox"]:hover {
+  transform: scale(1.1);
 }
 
 .debt-description {
   font-weight: 500;
   font-size: 16px;
+  line-height: 1.4;
+  color: #333;
+}
+
+.debt-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .debt-date, .debt-creditor {
@@ -1198,13 +1289,6 @@ function formatDateForInput(date) {
   align-items: flex-end;
   gap: 6px;
   align-self: center;
-}
-
-.debt-amount {
-  font-weight: bold;
-  font-size: 18px;
-  align-self: center;
-  color: #F44336;
 }
 
 .debt-type-selector {
@@ -1247,7 +1331,7 @@ function formatDateForInput(date) {
 
 .debt-type-tag {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
@@ -1264,8 +1348,38 @@ function formatDateForInput(date) {
   color: #c62828;
 }
 
-.lent-amount {
+.debt-amount {
+  font-weight: bold;
+  font-size: 18px;
+  color: #F44336;
+  text-align: right;
+  transition: all 0.2s;
+}
+
+.debt-amount.lent-amount {
   color: #2196F3;
+}
+
+.paid-label {
+  background-color: #4CAF50;
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  white-space: nowrap;
+  margin-bottom: 6px;
+  display: inline-block;
+  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
+}
+
+.debt-total-note {
+  font-size: 12px;
+  color: #757575;
+  font-style: italic;
+  margin-top: 4px;
+  display: block;
 }
 
 /* Modal Styles */
@@ -1454,7 +1568,10 @@ function formatDateForInput(date) {
     gap: 8px;
     width: 100%;
   }
-  
+
+  .month-filter {
+    flex:1;
+  }
   .summary-item {
     flex-direction: row;
     justify-content: space-between;
@@ -1521,17 +1638,6 @@ function formatDateForInput(date) {
   color: #777;
   text-align: center;
   margin-top: 2px;
-}
-
-.paid-label {
-  background-color: #4CAF50;
-  color: white;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  white-space: nowrap;
 }
 
 .confirm-modal {
@@ -1627,5 +1733,172 @@ function formatDateForInput(date) {
   width: 18px;
   height: 18px;
   font-size: 14px;
+}
+
+.view-toggle-button {
+  padding: 10px 16px;
+  background-color: #f1f1f1;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.view-toggle-button:hover {
+  background-color: #e0e0e0;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.debt-total-note {
+  font-size: 12px;
+  color: #757575;
+  font-style: italic;
+}
+
+.control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap : 10px;
+  flex-wrap: wrap;
+}
+
+.debts-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+  padding: 20px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f8f9fa, #ffffff);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.summary-item {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.summary-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.summary-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  min-height: 340px;
+}
+.summary-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.summary-item.total {
+  background: linear-gradient(145deg, #e8f5e9, #ffffff);
+  border-left: 4px solid #4CAF50;
+}
+
+.summary-item.total .summary-value {
+  color: #2e7d32;
+}
+
+.summary-item.paid {
+  background: linear-gradient(145deg, #f3e5f5, #ffffff);
+  border-left: 4px solid #9c27b0;
+}
+
+.summary-item.paid .summary-value {
+  color: #6a1b9a;
+}
+
+.summary-item.remaining {
+  background: linear-gradient(145deg, #ffebee, #ffffff);
+  border-left: 4px solid #f44336;
+}
+
+.summary-item.remaining .summary-value {
+  color: #c62828;
+}
+
+@media (max-width: 768px) {
+  .debts-summary {
+    grid-template-columns: repeat(3, 1fr);
+    padding: 15px;
+    gap: 15px;
+  }
+
+  .summary-item {
+    padding: 15px;
+  }
+
+  .summary-label {
+    font-size: 0.9rem;
+  }
+
+  .summary-value {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .debts-summary {
+    grid-template-columns: 1fr;
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+  }
+
+  .summary-label {
+    margin-bottom: 0;
+    font-size: 0.85rem;
+  }
+
+  .summary-value {
+    font-size: 1.1rem;
+    margin-top: 0;
+  }
+}
+.toggle-view-button{
+  border-radius: 20px;
+  outline: none;
+  border: none;
+  background-color: #8b939c;
+  min-height: 42px;
+  color: white;
+  padding-left: 10px;
+  padding-right: 10px;
+  cursor: pointer;
 }
 </style> 
