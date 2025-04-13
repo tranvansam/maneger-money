@@ -151,7 +151,9 @@
                 <div v-else-if="isPaid(debt)" class="paid-label">
                   {{ debt.debtType === 'lent' ? 'Đã thu' : 'Đã trả' }}
                 </div>
-                <div class="debt-amount" :class="{'lent-amount': debt.debtType === 'lent', 'settled-amount': debt.isSettled}">
+                <div class="debt-amount" 
+                     @click="openEditModal(debt)"
+                     :class="{'lent-amount': debt.debtType === 'lent', 'settled-amount': debt.isSettled}">
                   {{ showTotalAmounts && debt.isRecurring ? formatCurrency(debt.totalAmount || debt.amount) : formatCurrency(debt.amount) }}
                   <span v-if="debt.isRecurring && showTotalAmounts" class="debt-total-note">
                     ({{ formatCurrency(debt.amount) }}/tháng)
@@ -382,12 +384,131 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal chỉnh sửa khoản nợ -->
+    <div v-if="showEditModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Chỉnh sửa khoản {{ editingDebt?.debtType === 'lent' ? 'cho vay' : 'nợ' }}</h2>
+          <button @click="closeEditModal" class="close-button">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+          <form @submit.prevent="saveEdit">
+            <div class="form-group">
+              <label>Mô tả <span class="required">*</span></label>
+              <input 
+                type="text" 
+                v-model="editingDebt.description" 
+                required 
+                placeholder="Ví dụ: Mua xe máy"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>{{ editingDebt?.debtType === 'lent' ? 'Người vay' : 'Chủ nợ' }} <span class="required">*</span></label>
+              <input 
+                type="text" 
+                v-model="editingDebt.creditor"
+                required 
+                :placeholder="editingDebt?.debtType === 'lent' ? 'Tên người vay' : 'Tên chủ nợ'"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Số tiền (VND) <span class="required">*</span></label>
+              <div class="amount-input">
+                <input 
+                  type="text" 
+                  v-model="formattedEditAmount" 
+                  @input="formatEditAmount" 
+                  @blur="validateEditAmount"
+                  required 
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Ngày đến hạn <span class="required">*</span></label>
+              <input 
+                type="date" 
+                v-model="editingDebt.dueDate" 
+                required 
+              />
+            </div>
+
+            <div v-if="editingDebt?.isRecurring" class="form-group">
+              <label>Tổng số tiền <span class="required">*</span></label>
+              <div class="amount-input">
+                <input 
+                  type="text" 
+                  v-model="formattedEditTotalAmount" 
+                  @input="formatEditTotalAmount" 
+                  @blur="validateEditTotalAmount"
+                  required 
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div v-if="editingDebt?.isRecurring" class="form-group">
+              <label>Ngày kết thúc <span class="required">*</span></label>
+              <input 
+                type="date" 
+                v-model="editingDebt.endDate" 
+                required 
+              />
+            </div>
+          </form>
+        </div>
+        
+        <div class="form-actions">
+          <button type="button" @click="showDeleteConfirmModal = true" class="delete-button">
+            Xóa khoản nợ
+          </button>
+          <div class="action-buttons">
+            <button type="button" @click="closeEditModal" class="cancel-button">Hủy</button>
+            <button type="submit" @click="saveEdit" class="submit-button" :disabled="modalLoading">
+              {{ modalLoading ? 'Đang xử lý...' : 'Lưu thay đổi' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal xác nhận xóa -->
+    <div v-if="showDeleteConfirmModal" class="modal-overlay">
+      <div class="modal confirm-modal">
+        <div class="modal-header">
+          <h2>Xác nhận xóa</h2>
+          <button @click="showDeleteConfirmModal = false" class="close-button">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+          <p>
+            Bạn có chắc chắn muốn xóa khoản {{ editingDebt?.debtType === 'lent' ? 'cho vay' : 'nợ' }}:
+            <strong>{{ editingDebt?.description }}</strong>?
+          </p>
+          <p class="warning-text">
+            Lưu ý: Hành động này không thể hoàn tác.
+          </p>
+        </div>
+        
+        <div class="form-actions">
+          <button type="button" @click="showDeleteConfirmModal = false" class="cancel-button">Hủy</button>
+          <button type="button" @click="deleteDebt" class="delete-confirm-button" :disabled="modalLoading">
+            {{ modalLoading ? 'Đang xử lý...' : 'Xác nhận xóa' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
-import { collection, addDoc, getDocs, updateDoc, doc, query, where, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, doc, query, where, orderBy, Timestamp, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
 
@@ -1262,6 +1383,161 @@ const settleDebt = async (debt) => {
     alert(`Không thể tất toán khoản nợ: ${error.message}`);
   }
 };
+
+// Thêm các biến và hàm xử lý cho modal chỉnh sửa
+const showEditModal = ref(false);
+const formattedEditAmount = ref('');
+const formattedEditTotalAmount = ref('');
+
+// Mở modal chỉnh sửa
+const openEditModal = (debt) => {
+  // Convert Timestamp to Date object if needed
+  const dueDate = debt.dueDate instanceof Timestamp ? debt.dueDate.toDate() : new Date(debt.dueDate);
+  const endDate = debt.endDate instanceof Timestamp ? debt.endDate.toDate() : new Date(debt.endDate);
+  
+  editingDebt.value = { 
+    ...debt,
+    dueDate: formatDateForInput(dueDate),
+    endDate: debt.endDate ? formatDateForInput(endDate) : ''
+  };
+  
+  if (debt.isRecurring) {
+    formattedEditAmount.value = new Intl.NumberFormat('vi-VN').format(debt.amount);
+    formattedEditTotalAmount.value = new Intl.NumberFormat('vi-VN').format(debt.totalAmount || debt.amount);
+  } else {
+    formattedEditAmount.value = new Intl.NumberFormat('vi-VN').format(debt.amount);
+  }
+  showEditModal.value = true;
+};
+
+// Đóng modal chỉnh sửa
+const closeEditModal = () => {
+  showEditModal.value = false;
+  editingDebt.value = null;
+  formattedEditAmount.value = '';
+  formattedEditTotalAmount.value = '';
+};
+
+// Format số tiền chỉnh sửa
+const formatEditAmount = () => {
+  let value = formattedEditAmount.value.replace(/\D/g, '');
+  if (value) {
+    formattedEditAmount.value = new Intl.NumberFormat('vi-VN').format(parseInt(value));
+    editingDebt.value.amount = parseInt(value);
+  } else {
+    formattedEditAmount.value = '';
+    editingDebt.value.amount = '';
+  }
+};
+
+// Validate số tiền chỉnh sửa
+const validateEditAmount = () => {
+  if (!formattedEditAmount.value) {
+    formattedEditAmount.value = '0';
+    editingDebt.value.amount = 0;
+  }
+};
+
+// Format tổng số tiền chỉnh sửa
+const formatEditTotalAmount = () => {
+  let value = formattedEditTotalAmount.value.replace(/\D/g, '');
+  if (value) {
+    formattedEditTotalAmount.value = new Intl.NumberFormat('vi-VN').format(parseInt(value));
+    editingDebt.value.totalAmount = parseInt(value);
+  } else {
+    formattedEditTotalAmount.value = '';
+    editingDebt.value.totalAmount = '';
+  }
+};
+
+// Validate tổng số tiền chỉnh sửa
+const validateEditTotalAmount = () => {
+  if (!formattedEditTotalAmount.value) {
+    formattedEditTotalAmount.value = '0';
+    editingDebt.value.totalAmount = 0;
+  }
+};
+
+// Lưu chỉnh sửa
+const saveEdit = async () => {
+  if (!editingDebt.value || !editingDebt.value.id) {
+    console.error('No debt selected for editing');
+    return;
+  }
+
+  try {
+    modalLoading.value = true;
+    const debtRef = doc(db, 'users', user.value.uid, 'debts', editingDebt.value.id);
+
+    const updateData = {
+      description: editingDebt.value.description,
+      creditor: editingDebt.value.creditor,
+      amount: editingDebt.value.amount,
+      dueDate: Timestamp.fromDate(new Date(editingDebt.value.dueDate)),
+      updatedAt: Timestamp.now()
+    };
+
+    if (editingDebt.value.isRecurring) {
+      updateData.totalAmount = editingDebt.value.totalAmount;
+      updateData.endDate = Timestamp.fromDate(new Date(editingDebt.value.endDate));
+    }
+
+    await updateDoc(debtRef, updateData);
+
+    // Cập nhật lại danh sách
+    await fetchDebts();
+    closeEditModal();
+  } catch (error) {
+    console.error('Error updating debt:', error);
+    alert(`Không thể cập nhật khoản nợ: ${error.message}`);
+  } finally {
+    modalLoading.value = false;
+  }
+};
+
+// Thêm biến showDeleteConfirmModal
+const showDeleteConfirmModal = ref(false);
+
+// Thêm hàm xóa khoản nợ
+const deleteDebt = async () => {
+  if (!editingDebt.value || !editingDebt.value.id) {
+    console.error('No debt selected for deletion');
+    return;
+  }
+
+  try {
+    modalLoading.value = true;
+    
+    // 1. Xóa các giao dịch liên quan đến khoản nợ
+    const transactionsRef = collection(db, 'users', user.value.uid, 'transactions');
+    const q = query(transactionsRef, where('debtId', '==', editingDebt.value.id));
+    const querySnapshot = await getDocs(q);
+    
+    // Xóa từng giao dịch
+    const deletePromises = querySnapshot.docs.map(doc => {
+      return deleteDoc(doc.ref);
+    });
+    await Promise.all(deletePromises);
+    
+    console.log(`Đã xóa ${querySnapshot.size} giao dịch liên quan`);
+
+    // 2. Xóa khoản nợ
+    const debtRef = doc(db, 'users', user.value.uid, 'debts', editingDebt.value.id);
+    await deleteDoc(debtRef);
+
+    // Đóng các modal
+    showDeleteConfirmModal.value = false;
+    closeEditModal();
+
+    // Cập nhật lại danh sách
+    await fetchDebts();
+  } catch (error) {
+    console.error('Error deleting debt:', error);
+    alert(`Không thể xóa khoản nợ: ${error.message}`);
+  } finally {
+    modalLoading.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -1946,7 +2222,7 @@ const settleDebt = async (debt) => {
 
 .form-actions {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 12px;
   padding: 16px 20px;
   background-color: #f9f9f9;
@@ -2437,5 +2713,77 @@ const settleDebt = async (debt) => {
 .debt-type-tag.lent-tag {
   background-color: #4CAF50;
   color: white;
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  background-color: #f9f9f9;
+  border-radius: 0 0 8px 8px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.delete-button {
+  width: 100%;
+  padding: 12px 20px;
+  background-color: transparent;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.delete-button:hover {
+  background-color: #dc3545;
+  color: white;
+}
+
+.delete-confirm-button {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+  flex: 1;
+}
+
+.delete-confirm-button:hover {
+  background-color: #c82333;
+}
+
+.warning-text {
+  color: #dc3545;
+  font-style: italic;
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .form-actions {
+    padding: 12px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .delete-button,
+  .cancel-button,
+  .submit-button,
+  .delete-confirm-button {
+    width: 100%;
+    padding: 10px 16px;
+  }
 }
 </style> 
