@@ -186,7 +186,7 @@
     
     <!-- Modal thêm khoản nợ -->
     <div v-if="showAddDebtModal" class="modal-overlay">
-      <div class="modal">
+      <div class="modal-content">
         <div class="modal-header">
           <h2 v-if="newDebt.debtType === 'lent'">Thêm khoản cho vay</h2>
           <h2 v-else>Thêm khoản nợ</h2>
@@ -393,7 +393,7 @@
 
     <!-- Modal chỉnh sửa khoản nợ -->
     <div v-if="showEditModal" class="modal-overlay">
-      <div class="modal">
+      <div class="modal-content">
         <div class="modal-header">
           <h2>Chỉnh sửa khoản {{ editingDebt?.debtType === 'lent' ? 'cho vay' : 'nợ' }}</h2>
           <button @click="closeEditModal" class="close-button">&times;</button>
@@ -2135,14 +2135,35 @@ const deleteDebt = async () => {
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  padding: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.modal {
+.modal-content {
   background-color: white;
+  padding: 20px;
   border-radius: 8px;
-  width: 90%;
+  width: 100%;
   max-width: 500px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  margin: auto;
+  margin-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px;
+    align-items: flex-start;
+    padding-top: 20px;
+  }
+
+  .modal-content {
+    max-height: calc(100vh - 100px);
+    margin-bottom: 80px; /* Khoảng cách với thanh menu */
+  }
 }
 
 .modal-header {
