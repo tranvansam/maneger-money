@@ -511,6 +511,7 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { collection, addDoc, getDocs, updateDoc, doc, query, where, orderBy, Timestamp, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
+import { debounce } from 'lodash';
 
 const props = defineProps({
   filterType: {
@@ -523,7 +524,7 @@ const props = defineProps({
 const emit = defineEmits(['debt-toggled', 'debt-added']);
 
 const { user } = useAuth();
-const loading = ref(true);
+const loading = ref(false); // Đổi giá trị mặc định thành false
 const modalLoading = ref(false);
 const debts = ref([]);
 const showAddDebtModal = ref(false);
@@ -576,20 +577,74 @@ const displayMonth = computed(() => {
   return `${months[selectedMonth.value.getMonth()]} ${selectedMonth.value.getFullYear()}`;
 });
 
-// Chuyển đến tháng trước
+// Khởi tạo
+onMounted(() => {
+  console.log('DebtList mounted');
+  if (user.value) {
+    resetNewDebt();
+    // Không gọi fetchDebts ở đây vì watcher sẽ tự gọi
+  }
+});
+
+// Tối ưu lại watchers để tránh gọi API nhiều lần
+const debouncedFetch = debounce(() => {
+  if (!loading.value && user.value) {
+    fetchDebts();
+  }
+}, 300);
+
+// Gộp tất cả các watchers thành một
+watch(
+  [
+    () => props.filterType,
+    () => showTotalAmounts.value,
+    () => selectedMonth.value?.getTime(),
+    () => user.value?.uid
+  ],
+  ([newFilterType, newShowTotal, newMonth, newUid], [oldFilterType, oldShowTotal, oldMonth, oldUid]) => {
+    console.log('Watch triggered:', {
+      filterType: [oldFilterType, newFilterType],
+      showTotal: [oldShowTotal, newShowTotal],
+      month: [oldMonth, newMonth],
+      uid: [oldUid, newUid]
+    });
+
+    // Chỉ gọi API khi thực sự có thay đổi
+    if (
+      newFilterType !== oldFilterType ||
+      newShowTotal !== oldShowTotal ||
+      newMonth !== oldMonth ||
+      newUid !== oldUid
+    ) {
+      debouncedFetch();
+    }
+  },
+  { 
+    deep: false, // Tắt deep watching vì không cần thiết
+    immediate: true // Gọi ngay lần đầu mounted
+  }
+);
+
+// Sửa lại các hàm điều hướng tháng
 const previousMonth = () => {
   const newDate = new Date(selectedMonth.value);
   newDate.setMonth(newDate.getMonth() - 1);
   selectedMonth.value = newDate;
-  fetchDebts();
+  // Không cần gọi fetchDebts ở đây vì watcher sẽ tự gọi
 };
 
-// Chuyển đến tháng sau
 const nextMonth = () => {
   const newDate = new Date(selectedMonth.value);
   newDate.setMonth(newDate.getMonth() + 1);
   selectedMonth.value = newDate;
-  fetchDebts();
+  // Không cần gọi fetchDebts ở đây vì watcher sẽ tự gọi
+};
+
+// Sửa lại hàm toggle view
+const toggleTotalView = () => {
+  showTotalAmounts.value = !showTotalAmounts.value;
+  console.log('Toggled total view:', showTotalAmounts.value);
+  // Không cần gọi fetchDebts ở đây vì watcher sẽ tự gọi
 };
 
 // Biến lưu số tiền định dạng
@@ -676,69 +731,89 @@ const totalDebt = computed(() => {
 });
 
 const totalDebtAmount = computed(() => {
-  if (showTotalAmounts.value) {
-    // For total view, sum all unsettled debts
-    return debts.value
-      .filter(debt => !debt.isSettled)
-      .reduce((sum, debt) => {
-        if (debt.isRecurring) {
-          // For recurring debts, calculate remaining unpaid amount
-          const totalAmount = debt.totalAmount || calculateRecurringTotal(debt);
-          const paidAmount = calculateTotalPaidForRecurring(debt);
-          return sum + (totalAmount - paidAmount);
+  return debts.value.reduce((total, debt) => {
+    // Nếu khoản nợ đã được tất toán, bỏ qua
+    if (debt.isSettled) return total;
+    
+    // Nếu đang xem theo tháng
+    if (!showTotalAmounts.value) {
+      const currentMonthKey = getMonthKey(selectedMonth.value);
+      
+      // Với khoản nợ định kỳ
+      if (debt.isRecurring) {
+        if (isDebtActiveForMonth(debt, currentMonthKey)) {
+          return total + debt.amount;
         }
-        return sum + (debt.amount || 0);
-      }, 0);
-  } else {
-    // For monthly view, sum only unsettled debts for current month
-    const currentMonthKey = getMonthKey(selectedMonth.value);
-    return debts.value
-      .filter(debt => !debt.isSettled)
-      .reduce((sum, debt) => {
-        if (debt.isRecurring) {
-          // For recurring debts, only count if active and unpaid for this month
-          if (isDebtActiveForMonth(debt, currentMonthKey) && !debt.paidMonths?.[currentMonthKey]) {
-            return sum + (debt.amount || 0);
-          }
-          return sum;
-        }
-        // For non-recurring debts, include if unpaid
-        return sum + (!debt.paid ? (debt.amount || 0) : 0);
-      }, 0);
-  }
+        return total;
+      }
+      
+      // Với khoản nợ thường
+      const dueDate = debt.dueDate instanceof Timestamp ? debt.dueDate.toDate() : new Date(debt.dueDate);
+      if (dueDate.getMonth() === selectedMonth.value.getMonth() && 
+          dueDate.getFullYear() === selectedMonth.value.getFullYear()) {
+        return total + debt.amount;
+      }
+      return total;
+    }
+    
+    // Nếu xem tổng
+    if (debt.isRecurring) {
+      return total + (debt.totalAmount || debt.amount);
+    }
+    return total + debt.amount;
+  }, 0);
 });
 
 const totalPaidAmount = computed(() => {
-  const currentMonthKey = getMonthKey(selectedMonth.value);
-  
-  if (showTotalAmounts.value) {
-    // For total view, sum all paid amounts
-    return debts.value.reduce((sum, debt) => {
-      if (debt.isRecurring) {
-        // For recurring debts, sum all paid months
-        return sum + calculateTotalPaidForRecurring(debt);
-      }
-      // For regular debts, add if paid
-      return sum + (debt.paid ? (debt.amount || 0) : 0);
-    }, 0);
-  } else {
-    // For monthly view, only count current month payments
-    return debts.value.reduce((sum, debt) => {
-      if (debt.isRecurring) {
-        // For recurring debts, check if current month is paid
-        if (debt.paidMonths?.[currentMonthKey]) {
-          return sum + (debt.amount || 0);
+  return debts.value.reduce((total, debt) => {
+    // Nếu khoản nợ đã được tất toán
+    if (debt.isSettled) {
+      if (!showTotalAmounts.value) {
+        // Kiểm tra xem có tất toán trong tháng hiện tại không
+        const settledDate = debt.settledDate instanceof Timestamp ? 
+          debt.settledDate.toDate() : new Date(debt.settledDate);
+        if (settledDate.getMonth() === selectedMonth.value.getMonth() && 
+            settledDate.getFullYear() === selectedMonth.value.getFullYear()) {
+          return total + debt.settlementAmount;
         }
-        return sum;
+        return total;
       }
-      // For regular debts in the current month, add if paid
-      return sum + (debt.paid ? (debt.amount || 0) : 0);
-    }, 0);
-  }
+      return total + debt.settlementAmount;
+    }
+
+    // Nếu đang xem theo tháng
+    if (!showTotalAmounts.value) {
+      const currentMonthKey = getMonthKey(selectedMonth.value);
+      
+      // Với khoản nợ định kỳ
+      if (debt.isRecurring) {
+        if (debt.paidMonths?.[currentMonthKey]) {
+          return total + debt.amount;
+        }
+        return total;
+      }
+      
+      // Với khoản nợ thường
+      const dueDate = debt.dueDate instanceof Timestamp ? debt.dueDate.toDate() : new Date(debt.dueDate);
+      if (debt.paid && 
+          dueDate.getMonth() === selectedMonth.value.getMonth() && 
+          dueDate.getFullYear() === selectedMonth.value.getFullYear()) {
+        return total + debt.amount;
+      }
+      return total;
+    }
+    
+    // Nếu xem tổng
+    if (debt.isRecurring) {
+      const paidMonths = Object.values(debt.paidMonths || {}).filter(Boolean).length;
+      return total + (paidMonths * debt.amount);
+    }
+    return total + (debt.paid ? debt.amount : 0);
+  }, 0);
 });
 
 const remainingAmount = computed(() => {
-  return totalDebtAmount.value - totalPaidAmount.value;
+  return Math.max(0, totalDebtAmount.value - totalPaidAmount.value);
 });
 
 // Helper function to calculate total amount for recurring debt
@@ -818,119 +893,90 @@ const resetNewDebt = () => {
 // Lấy danh sách nợ
 const fetchDebts = async () => {
   if (!user.value) {
-    console.log('No user logged in, skipping debt fetch');
-    loading.value = false;
+    console.log('Skip fetching: No user');
     return;
   }
 
-  console.log('Fetching debts for user:', user.value.uid);
-  loading.value = true;
-  // Clear existing debts before fetching
-  debts.value = [];
-  const processedIds = new Set();
+  // Nếu đang loading thì không fetch nữa
+  if (loading.value) {
+    console.log('Skip fetching: Already loading');
+    return;
+  }
 
   try {
+    loading.value = true;
+    console.log('Fetching debts for user:', user.value.uid);
+    
+    // Clear existing debts
+    debts.value = [];
+    
     const debtCollection = collection(db, `users/${user.value.uid}/debts`);
-    let debtQuery;
+    let baseQuery = query(debtCollection, where('debtType', '==', props.filterType));
 
-    if (!showTotalAmounts.value) {
-      // For monthly view, we need to handle both regular and recurring debts
-      const startOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), 1);
-      const endOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth() + 1, 0, 23, 59, 59);
+    const querySnapshot = await getDocs(baseQuery);
+    const fetchedDebts = [];
+    
+    querySnapshot.docs.forEach(doc => {
+      const debtData = doc.data();
+      const debtDate = debtData.dueDate?.toDate() || new Date();
+      const endDate = debtData.endDate?.toDate();
       
-      console.log('Fetching debts for month:', startOfMonth, 'to', endOfMonth);
-      
-      // First, get regular debts for this month
-      debtQuery = query(
-        debtCollection,
-        where('debtType', '==', props.filterType),
-        where('isRecurring', '==', false),
-        where('dueDate', '>=', Timestamp.fromDate(startOfMonth)),
-        where('dueDate', '<=', Timestamp.fromDate(endOfMonth))
-      );
-
-      const regularDebts = await getDocs(debtQuery);
-      
-      // Process regular debts
-      regularDebts.docs.forEach(doc => {
-        if (!processedIds.has(doc.id)) {
-          const debtData = doc.data();
-          debts.value.push({
-            id: doc.id,
-            ...debtData,
-            dueDate: debtData.dueDate?.toDate() || new Date(),
-            dueStatus: checkDueStatus(debtData)
-          });
-          processedIds.add(doc.id);
-        }
-      });
-
-      // Then, get recurring debts that start before or during this month and end after or during this month
-      const recurringQuery = query(
-        debtCollection,
-        where('debtType', '==', props.filterType),
-        where('isRecurring', '==', true)
-      );
-
-      const recurringDebts = await getDocs(recurringQuery);
-
-      // Process recurring debts
-      recurringDebts.docs.forEach(doc => {
-        if (!processedIds.has(doc.id)) {
-          const debtData = doc.data();
-          const startDate = debtData.dueDate?.toDate() || new Date();
-          const endDate = debtData.endDate?.toDate();
-          
-          // Check if this recurring debt should be shown for the selected month
-          if ((!endDate || endDate >= startOfMonth) && startDate <= endOfMonth) {
-            // Adjust the due date for this month
-            const monthlyDueDate = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), startDate.getDate());
+      if (!showTotalAmounts.value) {
+        // For monthly view
+        const startOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth(), 1);
+        const endOfMonth = new Date(selectedMonth.value.getFullYear(), selectedMonth.value.getMonth() + 1, 0, 23, 59, 59);
+        
+        // For recurring debts
+        if (debtData.isRecurring) {
+          if ((!endDate || endDate >= startOfMonth) && debtDate <= endOfMonth) {
+            const monthlyDueDate = new Date(
+              selectedMonth.value.getFullYear(),
+              selectedMonth.value.getMonth(),
+              debtDate.getDate()
+            );
             
-            debts.value.push({
+            fetchedDebts.push({
               id: doc.id,
               ...debtData,
               dueDate: monthlyDueDate,
               dueStatus: checkDueStatus({...debtData, dueDate: monthlyDueDate})
             });
-            processedIds.add(doc.id);
           }
-        }
-      });
-    } else {
-      // For total view, get all debts of the specified type regardless of date
-      console.log('Fetching all debts of type:', props.filterType);
-      debtQuery = query(
-        debtCollection,
-        where('debtType', '==', props.filterType)
-      );
-
-      const querySnapshot = await getDocs(debtQuery);
-      querySnapshot.docs.forEach(doc => {
-        if (!processedIds.has(doc.id)) {
-          const debtData = doc.data();
-          debts.value.push({
+        } 
+        // For regular debts
+        else if (debtDate >= startOfMonth && debtDate <= endOfMonth) {
+          fetchedDebts.push({
             id: doc.id,
             ...debtData,
-            dueDate: debtData.dueDate?.toDate() || new Date(),
+            dueDate: debtDate,
             dueStatus: checkDueStatus(debtData)
           });
-          processedIds.add(doc.id);
         }
-      });
-    }
-    
-    // Sort debts by dueDate
-    debts.value.sort((a, b) => {
-      // In total view, sort recurring debts first, then by due date
-      if (showTotalAmounts.value) {
-        if (a.isRecurring && !b.isRecurring) return -1;
-        if (!a.isRecurring && b.isRecurring) return 1;
+      } else {
+        // For total view, get all debts
+        fetchedDebts.push({
+          id: doc.id,
+          ...debtData,
+          dueDate: debtDate,
+          dueStatus: checkDueStatus(debtData)
+        });
       }
-      return a.dueDate - b.dueDate;
     });
-    
-    console.log('Total unique debts loaded:', debts.value.length);
-    
+
+    // Sort debts
+    fetchedDebts.sort((a, b) => {
+      if (showTotalAmounts.value) {
+        if (a.isRecurring !== b.isRecurring) {
+          return a.isRecurring ? -1 : 1;
+        }
+      }
+      return new Date(a.dueDate) - new Date(b.dueDate);
+    });
+
+    // Update debts after all processing is done
+    debts.value = fetchedDebts;
+    console.log(`Fetched ${debts.value.length} debts`);
+
   } catch (error) {
     console.error('Error fetching debts:', error);
     alert('Lỗi tải dữ liệu: ' + error.message);
@@ -1200,50 +1246,6 @@ const isSameDay = (date1, date2) => {
     date1.getDate() === date2.getDate();
 };
 
-// Khởi tạo
-onMounted(async () => {
-  console.log('DebtList mounted');
-  if (user.value) {
-    resetNewDebt();
-    // Chỉ gọi fetchDebts một lần khi mount
-    await fetchDebts();
-  }
-});
-
-// Watch khi filterType thay đổi - thêm immediate: false để tránh gọi ngay lập tức
-watch(() => props.filterType, async (newFilterType, oldFilterType) => {
-  console.log("Filter type changed from:", oldFilterType, "to:", newFilterType);
-  if (oldFilterType !== newFilterType) { // Chỉ gọi khi thực sự có thay đổi
-    resetNewDebt();
-    await fetchDebts();
-  }
-}, { immediate: false });
-
-// Watch khi user thay đổi - thêm immediate: false
-watch(user, async (newUser, oldUser) => {
-  console.log("User changed");
-  if (newUser && newUser.uid !== oldUser?.uid) { // Chỉ gọi khi user thực sự thay đổi
-    resetNewDebt();
-    await fetchDebts();
-  }
-}, { immediate: false });
-
-// Watch cho selectedMonth - thêm điều kiện để tránh gọi không cần thiết
-watch(selectedMonth, async (newMonth, oldMonth) => {
-  console.log("Selected month changed");
-  if (newMonth.getTime() !== oldMonth.getTime()) { // Chỉ gọi khi tháng thực sự thay đổi
-    await fetchDebts();
-  }
-}, { immediate: false });
-
-// Watch cho showTotalAmounts - thêm điều kiện
-watch(showTotalAmounts, async (newValue, oldValue) => {
-  console.log("Show total amounts changed");
-  if (newValue !== oldValue) { // Chỉ gọi khi giá trị thực sự thay đổi
-    await fetchDebts();
-  }
-}, { immediate: false });
-
 // Khi component unmount, reset state
 onUnmounted(() => {
   debts.value = [];
@@ -1261,14 +1263,6 @@ function formatDateForInput(date) {
 
   return [year, month, day].join('-');
 }
-
-// Toggle between showing monthly amounts and total amounts
-const toggleTotalView = () => {
-  showTotalAmounts.value = !showTotalAmounts.value;
-  console.log('Toggled total view:', showTotalAmounts.value);
-  // Refresh debts with the new view setting
-  fetchDebts();
-};
 
 // Format month and year for display
 const formatMonthYear = (date) => {
