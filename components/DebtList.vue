@@ -39,7 +39,7 @@
       <div class="control-buttons">
         <button @click="toggleTotalView" class="toggle-view-button">
           <i class="fas" :class="showTotalAmounts ? 'fa-calendar-alt' : 'fa-chart-bar'"></i>
-          {{ showTotalAmounts ? 'Xem theo tháng' : 'Xem tổng nợ' }}
+          {{ showTotalAmounts ? 'Xem theo tháng' : 'Xem tất cả' }}
         </button>
         
         <button @click="openAddDebtModal" class="add-button">
@@ -71,7 +71,7 @@
         <div class="summary-item total">
           <div class="summary-label">
             <i class="fas fa-calculator"></i>
-            {{ props.filterType === 'owed' ? 'Nợ tháng này' : 'Cho vay tháng này' }}
+            {{ props.filterType === 'owed' ? 'Nợ :' : 'Cho vay :' }}
           </div>
           <div class="summary-value">{{ formatCurrency(totalDebtAmount) }}</div>
         </div>
@@ -79,7 +79,7 @@
         <div class="summary-item paid">
           <div class="summary-label">
             <i class="fas fa-check-circle"></i>
-            {{ props.filterType === 'owed' ? 'Đã trả tháng này' : 'Đã thu tháng này' }}
+            {{ props.filterType === 'owed' ? 'Đã trả :' : 'Đã thu :' }}
           </div>
           <div class="summary-value">{{ formatCurrency(totalPaidAmount) }}</div>
         </div>
@@ -87,7 +87,7 @@
         <div class="summary-item remaining">
           <div class="summary-label">
             <i class="fas fa-exclamation-circle"></i>
-            {{ props.filterType === 'owed' ? 'Còn nợ tháng này' : 'Chưa thu tháng này' }}
+            {{ props.filterType === 'owed' ? 'Còn nợ :' : 'Chưa thu :' }}
           </div>
           <div class="summary-value">{{ formatCurrency(remainingAmount) }}</div>
         </div>
@@ -96,64 +96,80 @@
       <div class="debt-list">
         <div v-for="debt in debts" :key="debt.id + (debt.isRecurring ? getMonthKey(selectedMonth.value) : '')" 
              class="debt-item" 
-             :class="{ 
-               'paid': isPaid(debt), 
-               'recurring': debt.isRecurring,
-               'lent': debt.debtType === 'lent',
-               'overdue': checkDueStatus(debt) === 'overdue',
-               'due-today': checkDueStatus(debt) === 'due-today',
-               'due-soon': checkDueStatus(debt) === 'due-soon'
-             }">
-          <div class="debt-info">
-            <div class="debt-checkbox">
-              <input 
-                type="checkbox" 
-                :checked="isPaid(debt)" 
-                @change="showConfirmToggle(debt)"
-                :id="`debt-${debt.id}-${debt.isRecurring ? getMonthKey(selectedMonth.value) : ''}`"
-              />
-              <label :for="`debt-${debt.id}-${debt.isRecurring ? getMonthKey(selectedMonth.value) : ''}`"></label>
-            </div>
-            <div class="debt-details">
-              <div class="debt-description">
-                <span v-if="debt.debtType === 'lent'" class="debt-type-tag lent-tag">Cho vay</span>
-                <span v-else class="debt-type-tag owed-tag">Nợ</span>
-                {{ debt.description }}
-                <span v-if="debt.isRecurring" class="recurring-badge" title="Khoản trả góp định kỳ">
-                  <i>⟳</i>
-                </span>
-                <span v-if="checkDueStatus(debt) === 'overdue'" class="due-status-badge overdue" title="Đã quá hạn">
-                  ⚠️
-                </span>
-                <span v-else-if="checkDueStatus(debt) === 'due-today'" class="due-status-badge due-today" title="Đến hạn hôm nay">
-                  📅
-                </span>
-                <span v-else-if="checkDueStatus(debt) === 'due-soon'" class="due-status-badge due-soon" title="Sắp đến hạn">
-                  ⏰
-                </span>
+             :class="{ 'settled': debt.isSettled, 'paid': isPaid(debt) }">
+          <div class="debt-content">
+            <div class="debt-header">
+              <div class="debt-info">
+                <div class="debt-checkbox" v-if="!debt.isSettled || ((props.filterType === 'owed' && !debt.isRecurring) || props.filterType === 'lent')">
+                  <input 
+                    type="checkbox" 
+                    :checked="isPaid(debt)" 
+                    @change="showConfirmToggle(debt)"
+                    :id="`debt-${debt.id}-${debt.isRecurring ? getMonthKey(selectedMonth.value) : ''}`"
+                  />
+                  <label :for="`debt-${debt.id}-${debt.isRecurring ? getMonthKey(selectedMonth.value) : ''}`"></label>
+                </div>
+                
+                <div class="debt-details">
+                  <div class="debt-title">
+                    <span v-if="debt.debtType === 'lent'" class="debt-type-tag lent-tag">Cho vay</span>
+                    <span v-else class="debt-type-tag owed-tag">Nợ</span>
+                    {{ debt.description }}
+                    <span v-if="debt.isRecurring" class="recurring-badge" title="Khoản trả góp định kỳ">
+                    </span>
+                    <span v-if="!debt.isSettled && checkDueStatus(debt) === 'overdue'" class="due-status-badge overdue" title="Đã quá hạn">
+                      ⚠️
+                    </span>
+                    <span v-else-if="!debt.isSettled && checkDueStatus(debt) === 'due-today'" class="due-status-badge due-today" title="Đến hạn hôm nay">
+                      📅
+                    </span>
+                    <span v-else-if="!debt.isSettled && checkDueStatus(debt) === 'due-soon'" class="due-status-badge due-soon" title="Sắp đến hạn">
+                      ⏰
+                    </span>
+                  </div>
+                  
+                  <div class="debt-date">Đến hạn: {{ formatDate(debt.dueDate) }}</div>
+                  <div v-if="debt.isRecurring && debt.endDate" class="debt-end-date">
+                    Kết thúc: {{ formatDate(debt.endDate) }}
+                  </div>
+                  <div class="debt-creditor">{{ debt.debtType === 'lent' ? 'Người vay' : 'Chủ nợ' }}: {{ debt.creditor }}</div>
+                  <div v-if="debt.isRecurring && debt.totalAmount" class="debt-total-amount">
+                    Tổng khoản vay: <span class="total-amount-value">{{ formatCurrency(debt.totalAmount) }}</span>
+                  </div>
+                  <div v-if="debt.isSettled" class="settlement-info">
+                    Đã tất toán ngày: {{ formatDate(debt.settledDate) }}
+                    <br>
+                    Số tiền tất toán: {{ formatCurrency(debt.settlementAmount) }}
+                  </div>
+                </div>
               </div>
-              <div class="debt-date">Đến hạn: {{ formatDate(debt.dueDate) }}</div>
-              <div v-if="debt.isRecurring && debt.endDate" class="debt-end-date">
-                Kết thúc: {{ formatDate(debt.endDate) }}
+              
+              <div class="debt-amount-container">
+                <div v-if="debt.isSettled" class="settled-label">
+                  Đã tất toán
+                </div>
+                <div v-else-if="isPaid(debt)" class="paid-label">
+                  {{ debt.debtType === 'lent' ? 'Đã thu' : 'Đã trả' }}
+                </div>
+                <div class="debt-amount" :class="{'lent-amount': debt.debtType === 'lent', 'settled-amount': debt.isSettled}">
+                  {{ showTotalAmounts && debt.isRecurring ? formatCurrency(debt.totalAmount || debt.amount) : formatCurrency(debt.amount) }}
+                  <span v-if="debt.isRecurring && showTotalAmounts" class="debt-total-note">
+                    ({{ formatCurrency(debt.amount) }}/tháng)
+                  </span>
+                  <span v-else-if="debt.isRecurring && !showTotalAmounts" class="debt-total-note">
+                    (Tổng: {{ formatCurrency(debt.totalAmount || debt.amount) }})
+                  </span>
+                </div>
+                <div v-if="debt.isRecurring && !debt.isSettled" class="settlement-container">
+                  <button 
+                    @click="openSettlementModal(debt)" 
+                    class="settlement-button"
+                    :disabled="loading"
+                  >
+                    Tất toán
+                  </button>
+                </div>
               </div>
-              <div class="debt-creditor">{{ debt.debtType === 'lent' ? 'Người vay' : 'Chủ nợ' }}: {{ debt.creditor }}</div>
-              <div v-if="debt.isRecurring && debt.totalAmount" class="debt-total-amount">
-                Tổng khoản vay: <span class="total-amount-value">{{ formatCurrency(debt.totalAmount) }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="debt-amount-container">
-            <div v-if="isPaid(debt)" class="paid-label">
-              {{ debt.debtType === 'lent' ? 'Đã thu' : 'Đã trả' }}
-            </div>
-            <div class="debt-amount" :class="{'lent-amount': debt.debtType === 'lent'}">
-              {{ showTotalAmounts && debt.isRecurring ? formatCurrency(debt.totalAmount || debt.amount) : formatCurrency(debt.amount) }}
-              <span v-if="debt.isRecurring && showTotalAmounts" class="debt-total-note">
-                ({{ formatCurrency(debt.amount) }}/tháng)
-              </span>
-              <span v-else-if="debt.isRecurring && !showTotalAmounts" class="debt-total-note">
-                (Tổng: {{ formatCurrency(debt.totalAmount || debt.amount) }})
-              </span>
             </div>
           </div>
         </div>
@@ -194,10 +210,25 @@
             </div>
             
             <div class="form-group">
-              <label>Mô tả <span class="required">*</span></label>
-              <input type="text" v-model="newDebt.description" required placeholder="Ví dụ: Trả góp mua xe" />
+              <label>Mô tả khoản {{ newDebt.debtType === 'lent' ? 'cho vay' : 'nợ' }}</label>
+              <input 
+                type="text" 
+                v-model="newDebt.description" 
+                placeholder="Ví dụ: Mua xe máy"
+                required
+              />
             </div>
-            
+
+            <div class="form-group">
+              <label>{{ newDebt.debtType === 'lent' ? 'Người vay' : 'Chủ nợ' }} <span class="required">*</span></label>
+              <input 
+                type="text" 
+                v-model="newDebt.creditor"
+                :placeholder="newDebt.debtType === 'lent' ? 'Tên người vay' : 'Tên chủ nợ'"
+                required
+              />
+            </div>
+
             <div class="form-group">
               <label>Số tiền (VND) <span class="required">*</span></label>
               <div class="amount-input">
@@ -207,23 +238,27 @@
                   @input="formatAmount" 
                   @blur="validateAmount"
                   required 
-                  placeholder="0" 
+                  placeholder="0"
                 />
               </div>
             </div>
-            
+
             <div class="form-group">
               <label>Ngày đến hạn <span class="required">*</span></label>
               <input type="date" v-model="newDebt.dueDate" required />
             </div>
-            
-            <div class="form-group recurring-group">
-              <div class="checkbox-wrapper">
-                <input type="checkbox" id="isRecurring" v-model="newDebt.isRecurring" />
-                <label for="isRecurring">Trả góp định kỳ hàng tháng</label>
+
+            <div v-if="newDebt.debtType === 'owed'" class="form-group recurring-group">
+              <div class="recurring-checkbox">
+                <input 
+                  type="checkbox" 
+                  v-model="newDebt.isRecurring" 
+                  id="recurring-checkbox"
+                />
+                <label for="recurring-checkbox">Trả góp định kỳ hàng tháng</label>
               </div>
               
-              <div v-if="newDebt.isRecurring" class="recurring-options">
+              <div v-if="newDebt.isRecurring" class="recurring-details">
                 <div class="form-group">
                   <label>Tổng số tiền vay <span class="required">*</span></label>
                   <div class="amount-input">
@@ -233,25 +268,16 @@
                       @input="formatTotalAmount" 
                       @blur="validateTotalAmount"
                       required 
-                      placeholder="0" 
+                      placeholder="0"
                     />
                   </div>
                 </div>
+
                 <div class="form-group">
-                  <label>Ngày kết thúc</label>
-                  <input type="date" v-model="newDebt.endDate" :min="newDebt.dueDate" />
+                  <label>Ngày kết thúc <span class="required">*</span></label>
+                  <input type="date" v-model="newDebt.endDate" required />
                 </div>
               </div>
-            </div>
-            
-            <div class="form-group">
-              <label>{{ newDebt.debtType === 'lent' ? 'Người vay' : 'Chủ nợ' }}</label>
-              <input type="text" v-model="newDebt.creditor" :placeholder="newDebt.debtType === 'lent' ? 'Tên người vay tiền' : 'Tên người/tổ chức cho vay'" />
-            </div>
-            
-            <div class="form-group">
-              <label>Ghi chú</label>
-              <textarea v-model="newDebt.notes" placeholder="Ghi chú thêm về khoản nợ"></textarea>
             </div>
           </form>
         </div>
@@ -308,6 +334,54 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal tất toán -->
+    <div v-if="showSettlementModal" class="modal-overlay">
+      <div class="modal settlement-modal">
+        <div class="modal-header">
+          <h2>Tất toán khoản nợ</h2>
+          <button @click="closeSettlementModal" class="close-button">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+          <p v-if="selectedDebt">
+            Bạn đang tất toán khoản nợ: <strong>{{ selectedDebt.description }}</strong>
+            <br>
+            Số tiền gốc: <strong>{{ formatCurrency(selectedDebt.amount) }}</strong>
+          </p>
+          
+          <div class="form-group">
+            <label>Số tiền tất toán <span class="required">*</span></label>
+            <div class="amount-input">
+              <input 
+                type="text" 
+                v-model="formattedSettlementAmount" 
+                @input="formatSettlementAmount" 
+                @blur="validateSettlementAmount"
+                required 
+                placeholder="0" 
+              />
+            </div>
+          </div>
+          
+          <div class="settlement-note">
+            * Khoản nợ sau khi tất toán sẽ không được tính vào tổng nợ và sẽ không xuất hiện trong các tháng tiếp theo
+          </div>
+        </div>
+        
+        <div class="form-actions">
+          <button type="button" @click="closeSettlementModal" class="cancel-button">Hủy</button>
+          <button 
+            type="button" 
+            @click="confirmSettlement" 
+            class="submit-button"
+            :disabled="!settlementAmount || settlementAmount <= 0"
+          >
+            Xác nhận tất toán
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -338,6 +412,9 @@ const showTotalAmounts = ref(false);
 const editingDebt = ref(null);
 const showStatusModal = ref(false);
 const currentDebtForStatus = ref(null);
+const showSettlementModal = ref(false);
+const settlementAmount = ref(0);
+const formattedSettlementAmount = ref('');
 
 // Format hiển thị số tiền
 const formatCurrency = (amount) => {
@@ -451,52 +528,123 @@ const validateTotalAmount = () => {
 // Computed properties
 const totalDebt = computed(() => {
   if (showTotalAmounts.value) {
-    // For total view, sum all debt amounts (or totalAmount for recurring debts)
+    // For total view, sum all debt amounts including recurring debts' total amounts
     return debts.value.reduce((sum, debt) => {
-      return sum + (debt.isRecurring ? (debt.totalAmount || debt.amount) : debt.amount || 0);
+      if (debt.isRecurring) {
+        // For recurring debts, use totalAmount if available, otherwise calculate based on months
+        const totalAmount = debt.totalAmount || calculateRecurringTotal(debt);
+        return sum + totalAmount;
+      }
+      return sum + (debt.amount || 0);
     }, 0);
   } else {
-    // For monthly view, sum monthly amounts
-    return debts.value.reduce((sum, debt) => sum + (debt.amount || 0), 0);
+    // For monthly view, sum only the current month's debts
+    const currentMonthKey = getMonthKey(selectedMonth.value);
+    return debts.value.reduce((sum, debt) => {
+      if (debt.isRecurring) {
+        // For recurring debts in monthly view, only count if the debt is active for this month
+        if (isDebtActiveForMonth(debt, currentMonthKey)) {
+          return sum + (debt.amount || 0);
+        }
+        return sum;
+      }
+      // For non-recurring debts, include if they belong to the current month
+      return sum + (debt.amount || 0);
+    }, 0);
   }
 });
 
 const totalDebtAmount = computed(() => {
-  return totalDebt.value;
+  if (showTotalAmounts.value) {
+    // For total view, sum all unsettled debts
+    return debts.value
+      .filter(debt => !debt.isSettled)
+      .reduce((sum, debt) => {
+        if (debt.isRecurring) {
+          // For recurring debts, calculate remaining unpaid amount
+          const totalAmount = debt.totalAmount || calculateRecurringTotal(debt);
+          const paidAmount = calculateTotalPaidForRecurring(debt);
+          return sum + (totalAmount - paidAmount);
+        }
+        return sum + (debt.amount || 0);
+      }, 0);
+  } else {
+    // For monthly view, sum only unsettled debts for current month
+    const currentMonthKey = getMonthKey(selectedMonth.value);
+    return debts.value
+      .filter(debt => !debt.isSettled)
+      .reduce((sum, debt) => {
+        if (debt.isRecurring) {
+          // For recurring debts, only count if active and unpaid for this month
+          if (isDebtActiveForMonth(debt, currentMonthKey) && !debt.paidMonths?.[currentMonthKey]) {
+            return sum + (debt.amount || 0);
+          }
+          return sum;
+        }
+        // For non-recurring debts, include if unpaid
+        return sum + (!debt.paid ? (debt.amount || 0) : 0);
+      }, 0);
+  }
 });
 
 const totalPaidAmount = computed(() => {
+  const currentMonthKey = getMonthKey(selectedMonth.value);
+  
   if (showTotalAmounts.value) {
-    // For total view, sum all paid amounts across all debts
+    // For total view, sum all paid amounts
     return debts.value.reduce((sum, debt) => {
       if (debt.isRecurring) {
-        // For recurring debts, count sum of all monthly payments
-        const paidMonths = debt.paidMonths || {};
-        const paidMonthsCount = Object.values(paidMonths).filter(Boolean).length;
-        return sum + (paidMonthsCount * debt.amount);
-      } else {
-        // For regular debts, add if paid
-        return sum + (debt.paid ? debt.amount : 0);
+        // For recurring debts, sum all paid months
+        return sum + calculateTotalPaidForRecurring(debt);
       }
+      // For regular debts, add if paid
+      return sum + (debt.paid ? (debt.amount || 0) : 0);
     }, 0);
   } else {
-    // For monthly view, only count payments for the current month
-    const currentMonthKey = getMonthKey(selectedMonth.value);
+    // For monthly view, only count current month payments
     return debts.value.reduce((sum, debt) => {
       if (debt.isRecurring) {
         // For recurring debts, check if current month is paid
-        return sum + ((debt.paidMonths && debt.paidMonths[currentMonthKey]) ? debt.amount : 0);
-      } else {
-        // For regular debts, add if paid
-        return sum + (debt.paid ? debt.amount : 0);
+        if (debt.paidMonths?.[currentMonthKey]) {
+          return sum + (debt.amount || 0);
+        }
+        return sum;
       }
+      // For regular debts in the current month, add if paid
+      return sum + (debt.paid ? (debt.amount || 0) : 0);
     }, 0);
   }
 });
 
 const remainingAmount = computed(() => {
-  return totalDebt.value - totalPaidAmount.value;
+  return totalDebtAmount.value - totalPaidAmount.value;
 });
+
+// Helper function to calculate total amount for recurring debt
+const calculateRecurringTotal = (debt) => {
+  if (!debt.startDate || !debt.endDate) return debt.amount || 0;
+  const start = debt.startDate instanceof Timestamp ? debt.startDate.toDate() : new Date(debt.startDate);
+  const end = debt.endDate instanceof Timestamp ? debt.endDate.toDate() : new Date(debt.endDate);
+  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+  return (debt.amount || 0) * months;
+};
+
+// Helper function to calculate total paid amount for recurring debt
+const calculateTotalPaidForRecurring = (debt) => {
+  if (!debt.paidMonths) return 0;
+  const paidMonthsCount = Object.values(debt.paidMonths).filter(Boolean).length;
+  return paidMonthsCount * (debt.amount || 0);
+};
+
+// Helper function to check if a debt is active for a given month
+const isDebtActiveForMonth = (debt, monthKey) => {
+  if (!debt.startDate || !debt.endDate) return true;
+  const [yearStr, monthStr] = monthKey.split('-');
+  const checkDate = new Date(parseInt(yearStr), parseInt(monthStr) - 1);
+  const startDate = debt.startDate instanceof Timestamp ? debt.startDate.toDate() : new Date(debt.startDate);
+  const endDate = debt.endDate instanceof Timestamp ? debt.endDate.toDate() : new Date(debt.endDate);
+  return checkDate >= startDate && checkDate <= endDate;
+};
 
 // Hàm kiểm tra trạng thái đã thanh toán, xét cả trường hợp khoản nợ định kỳ
 const isPaid = (debt) => {
@@ -506,11 +654,6 @@ const isPaid = (debt) => {
   }
   return debt.paid;
 };
-
-// Tính toán số nợ còn lại
-const remainingDebt = computed(() => {
-  return totalDebt.value - totalPaidAmount.value;
-});
 
 // Tạo key tháng-năm cho việc đánh dấu thanh toán
 const getMonthKey = (date) => {
@@ -990,6 +1133,135 @@ const formatMonthYear = (date) => {
 const openAddDebtModal = () => {
   showAddDebtModal.value = true;
 };
+
+// Modal tất toán - rename to openSettlementModal
+const openSettlementModal = (debt) => {
+  selectedDebt.value = debt;
+  showSettlementModal.value = true;
+  settlementAmount.value = debt.amount;
+  formattedSettlementAmount.value = new Intl.NumberFormat('vi-VN').format(debt.amount);
+};
+
+// Xác nhận tất toán
+const confirmSettlement = async () => {
+  if (!selectedDebt.value || !selectedDebt.value.id) {
+    console.error('No debt selected or invalid debt data');
+    return;
+  }
+
+  try {
+    const debtRef = doc(db, 'users', user.value.uid, 'debts', selectedDebt.value.id);
+    
+    // Cập nhật trạng thái tất toán
+    await updateDoc(debtRef, {
+      isSettled: true,
+      settledDate: Timestamp.now(),
+      settlementAmount: settlementAmount.value,
+      updatedAt: Timestamp.now()
+    });
+
+    // Thêm giao dịch tất toán
+    const transactionData = {
+      type: selectedDebt.value.debtType === 'lent' ? 'income' : 'expense',
+      amount: settlementAmount.value,
+      date: Timestamp.now(),
+      description: `Tất toán: ${selectedDebt.value.description}`,
+      category: selectedDebt.value.debtType === 'lent' ? 'debt_repayment' : 'debt_payment',
+      notes: `Tất toán khoản ${selectedDebt.value.debtType === 'lent' ? 'cho vay' : 'nợ'}`,
+      createdAt: Timestamp.now(),
+      userId: user.value.uid,
+      debtId: selectedDebt.value.id
+    };
+
+    await addDoc(
+      collection(db, 'users', user.value.uid, 'transactions'),
+      transactionData
+    );
+
+    // Đóng modal và reset state
+    closeSettlementModal();
+    
+    // Cập nhật lại danh sách
+    await fetchDebts();
+
+  } catch (error) {
+    console.error('Error settling debt:', error);
+    alert(`Không thể tất toán khoản nợ: ${error.message}`);
+  }
+};
+
+// Format settlement amount
+const formatSettlementAmount = () => {
+  let value = formattedSettlementAmount.value.replace(/\D/g, '');
+  if (value) {
+    formattedSettlementAmount.value = new Intl.NumberFormat('vi-VN').format(parseInt(value));
+    settlementAmount.value = parseInt(value);
+  } else {
+    formattedSettlementAmount.value = '';
+    settlementAmount.value = 0;
+  }
+};
+
+// Validate settlement amount
+const validateSettlementAmount = () => {
+  if (!formattedSettlementAmount.value) {
+    formattedSettlementAmount.value = '0';
+    settlementAmount.value = 0;
+  }
+};
+
+// Close settlement modal
+const closeSettlementModal = () => {
+  showSettlementModal.value = false;
+  selectedDebt.value = null;
+  settlementAmount.value = 0;
+  formattedSettlementAmount.value = '';
+};
+
+// Settle debt
+const settleDebt = async (debt) => {
+  if (!user.value) {
+    alert('Bạn cần đăng nhập để tất toán khoản nợ');
+    return;
+  }
+
+  try {
+    const debtRef = doc(db, 'users', user.value.uid, 'debts', debt.id);
+    await updateDoc(debtRef, {
+      isSettled: true,
+      settledDate: Timestamp.now(),
+      settlementAmount: debt.amount,
+      updatedAt: Timestamp.now()
+    });
+
+    // Add transaction
+    const transactionData = {
+      type: debt.debtType === 'lent' ? 'income' : 'expense',
+      amount: debt.amount,
+      date: Timestamp.now(),
+      description: `Tất toán: ${debt.description}`,
+      category: debt.debtType === 'lent' ? 'debt_repayment' : 'debt_payment',
+      notes: `Tất toán khoản ${debt.debtType === 'lent' ? 'cho vay' : 'nợ'}`,
+      createdAt: Timestamp.now(),
+      userId: user.value.uid,
+      debtId: debt.id
+    };
+
+    await addDoc(
+      collection(db, 'users', user.value.uid, 'transactions'),
+      transactionData
+    );
+
+    // Close settlement modal
+    closeSettlementModal();
+
+    // Refresh debts
+    await fetchDebts();
+  } catch (error) {
+    console.error('Error settling debt:', error);
+    alert(`Không thể tất toán khoản nợ: ${error.message}`);
+  }
+};
 </script>
 
 <style scoped>
@@ -1189,20 +1461,219 @@ const openAddDebtModal = () => {
 }
 
 .debt-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 18px 16px;
-  border-bottom: 1px solid #eee;
-  transition: all 0.2s;
   background-color: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  border: 1px solid #e0e0e0;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
-.debt-item:hover {
-  background-color: #f9f9f9;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-  z-index: 1;
+.debt-item.settled {
+  background-color: #f5f5f5;
+  border-color: #e0e0e0;
+}
+
+.debt-item.paid {
+  border-color: #4CAF50;
+}
+
+.debt-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.debt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.debt-info {
+  flex: 1;
+}
+
+.debt-checkbox {
+  margin-right: 8px;
+}
+
+.debt-checkbox input[type="checkbox"] {
+  display: none;
+}
+
+.debt-checkbox label {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #4CAF50;
+  border-radius: 4px;
   position: relative;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.debt-checkbox input[type="checkbox"]:checked + label:after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #4CAF50;
+  font-size: 14px;
+}
+
+.debt-details {
+  flex: 1;
+}
+
+.debt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: #333;
+  flex-wrap: wrap;
+}
+
+.debt-date, .debt-end-date, .debt-creditor, .debt-total-amount {
+  margin-bottom: 8px;
+  color: #666;
+  font-size: 14px;
+  text-align: left;
+}
+
+.total-amount-value {
+  font-weight: 600;
+  color: #333;
+}
+
+.debt-amount-container {
+  text-align: left;
+  min-width: 120px;
+  margin-bottom: 10px; /* Tạo khoảng trống cho button */
+}
+
+.debt-amount {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f44336;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.debt-amount.lent-amount {
+  color: #2196F3;
+}
+
+.debt-amount.settled-amount {
+  color: #9e9e9e;
+}
+
+.debt-total-note {
+  display: block;
+  font-size: 14px;
+  color: #757575;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.settlement-info {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e0e0e0;
+  font-size: 14px;
+  color: #666;
+}
+
+.settlement-container {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+}
+
+.settlement-button {
+  width: 100%;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.settlement-button:hover {
+  background-color: #45a049;
+}
+
+.settlement-button:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+.debt-type-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.debt-type-tag.owed-tag {
+  background-color: #ff5252;
+  color: white;
+}
+
+.debt-type-tag.lent-tag {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.recurring-badge {
+  color: #757575;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .debt-item {
+    padding: 12px;
+    padding-bottom: 60px; /* Tạo khoảng trống cho button trên mobile */
+  }
+
+  .debt-header {
+    flex-direction: column;
+  }
+
+  .debt-info {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .debt-amount-container {
+    width: 100%;
+    min-width: auto;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+  }
+
+  .settlement-container {
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+  }
+
+  .settlement-button {
+    padding: 10px;
+    font-size: 14px;
+  }
 }
 
 .debt-item.paid {
@@ -1285,93 +1756,60 @@ const openAddDebtModal = () => {
 
 .debt-amount-container {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  align-self: center;
-}
-
-.debt-type-selector {
-  display: flex;
-  gap: 16px;
-  margin-top: 8px;
-}
-
-.debt-type-option {
-  flex: 1;
-  padding: 12px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  flex-direction: column;
+  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
-}
-
-.debt-type-option:hover {
-  background-color: #f5f5f5;
-}
-
-.debt-type-option.selected {
-  background-color: #e8f5e9;
-  border-color: #4CAF50;
-  color: #2E7D32;
-}
-
-.debt-type-icon {
-  font-size: 24px;
-}
-
-.debt-type-text {
-  font-weight: 500;
-}
-
-.debt-type-tag {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  margin-right: 8px;
-}
-
-.lent-tag {
-  background-color: #e3f2fd;
-  color: #1565c0;
-}
-
-.owed-tag {
-  background-color: #ffebee;
-  color: #c62828;
+  margin-top: 12px;
 }
 
 .debt-amount {
-  font-weight: bold;
   font-size: 18px;
-  color: #F44336;
+  font-weight: 600;
+  color: #333;
   text-align: right;
-  transition: all 0.2s;
 }
 
-.debt-amount.lent-amount {
-  color: #2196F3;
+.debt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 
-.paid-label {
-  background-color: #4CAF50;
-  color: white;
-  padding: 3px 10px;
-  border-radius: 12px;
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
-  text-transform: uppercase;
-  white-space: nowrap;
-  margin-bottom: 6px;
-  display: inline-block;
-  box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
+}
+
+.status-badge.settled {
+  background-color: #9e9e9e;
+  color: white;
+}
+
+.status-badge.paid {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.debt-type-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.debt-type-tag.owed-tag {
+  background-color: #ff5252;
+  color: white;
+}
+
+.debt-type-tag.lent-tag {
+  background-color: #4CAF50;
+  color: white;
 }
 
 .debt-total-note {
@@ -1426,7 +1864,6 @@ const openAddDebtModal = () => {
 
 .modal-body {
   padding: 20px;
-  max-height: 60vh;
   overflow-y: auto;
 }
 
@@ -1438,53 +1875,73 @@ const openAddDebtModal = () => {
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
-  color: #444;
+  color: #333;
 }
 
-.required {
-  color: #F44336;
-  margin-left: 3px;
-}
-
-.form-group input, .form-group select, .form-group textarea {
+.form-group input[type="text"],
+.form-group input[type="date"] {
   width: 100%;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 15px;
-  transition: all 0.2s ease-in-out;
-  background-color: white;
-  box-sizing: border-box;
-}
-
-.form-group textarea {
-  min-height: 80px;
-  resize: vertical;
-}
-
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-  outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+  border-radius: 4px;
+  font-size: 16px;
 }
 
 .amount-input {
   position: relative;
-  display: flex;
-  align-items: center;
 }
 
 .amount-input input {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 15px;
   text-align: left;
-  transition: all 0.2s ease-in-out;
-  background-color: white;
-  box-sizing: border-box;
+  font-size: 18px;
   font-weight: 500;
+}
+
+.recurring-group {
+  border: 1px solid #e0e0e0;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: #f8f9fa;
+}
+
+.recurring-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.recurring-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #4CAF50;
+}
+
+.recurring-checkbox label {
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.recurring-details {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #e0e0e0;
+}
+
+.required {
+  color: #f44336;
+  margin-left: 4px;
+}
+
+@media (max-width: 768px) {
+  .modal-body {
+    padding: 16px;
+  }
+  
+  .recurring-group {
+    padding: 12px;
+  }
 }
 
 .form-actions {
@@ -1540,8 +1997,16 @@ const openAddDebtModal = () => {
   }
   
   .debt-item {
-    padding: 12px 0;
-    gap: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+    
+    .debt-header {
+      margin-bottom: 16px;
+    }
+    
+    .debt-amount-container {
+      margin-top: 12px;
+    }
   }
   
   .debt-info {
@@ -1900,5 +2365,77 @@ const openAddDebtModal = () => {
   padding-left: 10px;
   padding-right: 10px;
   cursor: pointer;
+}
+
+.settlement-button {
+  background-color: #FF9800;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+  white-space: nowrap;
+}
+
+.settlement-button:hover {
+  background-color: #F57C00;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.settled-label,
+.paid-label {
+  display: none;
+}
+
+.debt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.debt-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+.debt-status.overdue {
+  background-color: #ff5252;
+  color: white;
+}
+
+.debt-status.due-today {
+  background-color: #ff9800;
+  color: white;
+}
+
+.debt-status.due-soon {
+  background-color: #ffd740;
+  color: #333;
+}
+
+.debt-type-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.debt-type-tag.owed-tag {
+  background-color: #ff5252;
+  color: white;
+}
+
+.debt-type-tag.lent-tag {
+  background-color: #4CAF50;
+  color: white;
 }
 </style> 

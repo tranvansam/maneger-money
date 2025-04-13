@@ -156,10 +156,16 @@ onUnmounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   position: relative;
+  background-color: #f8f9fa;
+  min-height: 100vh;
 }
 
 .page-header {
   margin-bottom: 20px;
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .page-title {
@@ -206,15 +212,21 @@ onUnmounted(() => {
 }
 
 .tab-content {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  margin-bottom: 20px;
   animation: fadeIn 0.3s ease;
 }
 
 .description-box {
   margin-top: 30px;
-  background-color: #f9f9f9;
+  background-color: white;
   border-radius: 8px;
   padding: 15px;
   border-left: 4px solid #2196F3;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .description-title {
