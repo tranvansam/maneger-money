@@ -30,7 +30,7 @@
     <!-- Modal thêm giao dịch -->
     <div v-if="showAddTransactionModal" class="modal-overlay">
       <div class="modal">
-        <div class="modal-header">
+        <div class="modal-header" :class="{ 'income-header': newTransaction.type === 'income', 'expense-header': newTransaction.type === 'expense' }">
           <h2>Thêm giao dịch</h2>
           <button @click="showAddTransactionModal = false" class="close-button">&times;</button>
         </div>
@@ -40,12 +40,26 @@
             <div class="form-group">
               <label>Loại giao dịch</label>
               <div class="radio-group">
-                <label class="radio-option">
-                  <input type="radio" v-model="newTransaction.type" value="income" />
+                <label 
+                  class="radio-option" 
+                  :class="{ 'income': newTransaction.type === 'income' }"
+                >
+                  <input 
+                    type="radio" 
+                    v-model="newTransaction.type" 
+                    value="income"
+                  />
                   <span>Thu nhập</span>
                 </label>
-                <label class="radio-option">
-                  <input type="radio" v-model="newTransaction.type" value="expense" />
+                <label 
+                  class="radio-option" 
+                  :class="{ 'expense': newTransaction.type === 'expense' }"
+                >
+                  <input 
+                    type="radio" 
+                    v-model="newTransaction.type" 
+                    value="expense"
+                  />
                   <span>Chi tiêu</span>
                 </label>
               </div>
@@ -77,29 +91,27 @@
             
             <div class="form-group">
               <label>Danh mục <span class="required">*</span></label>
-              <select v-model="newTransaction.category" required>
-                <option value="" disabled>Chọn danh mục</option>
-                <optgroup v-if="newTransaction.type === 'income'" label="Thu nhập">
-                  <option value="salary">Lương</option>
-                  <option value="bonus">Thưởng</option>
-                  <option value="investment">Đầu tư</option>
-                  <option value="gifts">Quà tặng</option>
-                  <option value="performance">Đi diễn</option>
-                  <option value="other_income">Khác</option>
-                </optgroup>
-                <optgroup v-else label="Chi tiêu">
-                  <option value="food">Ăn uống</option>
-                  <option value="rent">Tiền nhà</option>
-                  <option value="utilities">Hóa đơn dịch vụ</option>
-                  <option value="transportation">Di chuyển</option>
-                  <option value="entertainment">Giải trí</option>
-                  <option value="shopping">Mua sắm</option>
-                  <option value="healthcare">Y tế</option>
-                  <option value="education">Giáo dục</option>
-                  <option value="debt_payment">Trả nợ</option>
-                  <option value="other_expense">Khác</option>
-                </optgroup>
-              </select>
+              <div class="category-select">
+                <select v-model="newTransaction.category" required>
+                  <option value="" disabled>Chọn danh mục</option>
+                  <optgroup v-if="newTransaction.type === 'income'" label="Thu nhập">
+                    <option v-for="cat in incomeCategories" :key="cat.id" :value="cat.id">
+                      {{ cat.name }}
+                    </option>
+                  </optgroup>
+                  <optgroup v-else label="Chi tiêu">
+                    <option v-for="cat in expenseCategories" :key="cat.id" :value="cat.id">
+                      {{ cat.name }}
+                    </option>
+                  </optgroup>
+                </select>
+                <button type="button" @click="openCategoryManager" class="manage-categories-icon" title="Quản lý danh mục">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -112,16 +124,23 @@
         </div>
       </div>
     </div>
+
+    <!-- Category Manager Component -->
+    <CategoryManager 
+      ref="categoryManager" 
+      @categories-updated="fetchCategories"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue';
-import { collection, addDoc } from 'firebase/firestore';
+import { ref, onMounted, watch, nextTick, computed } from 'vue';
+import { collection, addDoc, query, getDocs, where } from 'firebase/firestore';
 import { db } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
 import TransactionList from '~/components/TransactionList.vue';
 import { useRoute } from 'vue-router';
+import CategoryManager from '~/components/CategoryManager.vue';
 
 definePageMeta({
   middleware: 'auth'
@@ -140,11 +159,11 @@ const showAddTransactionModal = ref(false);
 
 // Transaction mới
 const newTransaction = ref({
-  type: 'income',
+  type: 'expense',
   amount: '',
   date: formatDateForInput(new Date()),
   description: '',
-  category: 'other_income'
+  category: 'other_expense'
 });
 
 const formattedAmount = ref('');
@@ -155,6 +174,61 @@ const notification = ref({
   message: '',
   type: 'success', // 'success' hoặc 'error'
   timeout: null
+});
+
+// Thêm ref cho CategoryManager
+const categoryManager = ref(null);
+
+// Danh mục mặc định hệ thống
+const defaultCategories = {
+  income: [
+    { id: 'salary', name: 'Lương', type: 'income', isDefault: false },
+    { id: 'bonus', name: 'Thưởng', type: 'income', isDefault: false },
+    { id: 'investment', name: 'Đầu tư', type: 'income', isDefault: false },
+    { id: 'gifts', name: 'Quà tặng', type: 'income', isDefault: false },
+    { id: 'performance', name: 'Đi diễn', type: 'income', isDefault: false },
+    { id: 'other_income', name: 'Khác', type: 'income', isDefault: true }
+  ],
+  expense: [
+    { id: 'food', name: 'Ăn uống', type: 'expense', isDefault: false },
+    { id: 'rent', name: 'Tiền nhà', type: 'expense', isDefault: false },
+    { id: 'utilities', name: 'Hóa đơn dịch vụ', type: 'expense', isDefault: false },
+    { id: 'transportation', name: 'Di chuyển', type: 'expense', isDefault: false },
+    { id: 'entertainment', name: 'Giải trí', type: 'expense', isDefault: false },
+    { id: 'shopping', name: 'Mua sắm', type: 'expense', isDefault: false },
+    { id: 'healthcare', name: 'Y tế', type: 'expense', isDefault: false },
+    { id: 'education', name: 'Giáo dục', type: 'expense', isDefault: false },
+    { id: 'debt_payment', name: 'Trả nợ', type: 'expense', isDefault: false },
+    { id: 'other_expense', name: 'Khác', type: 'expense', isDefault: true }
+  ]
+};
+
+// Danh mục thu nhập và chi tiêu riêng biệt
+const incomeCategories = ref([...defaultCategories.income]);
+const expenseCategories = ref([...defaultCategories.expense]);
+
+// Biến lưu danh mục mặc định hiện tại
+const currentDefaultIncome = ref('other_income');
+const currentDefaultExpense = ref('other_expense');
+
+// Thêm watcher cho newTransaction.type
+watch(() => newTransaction.value.type, (newType) => {
+  // Khi chuyển type, set category mặc định tương ứng
+  newTransaction.value.category = newType === 'income' 
+    ? currentDefaultIncome.value 
+    : currentDefaultExpense.value;
+});
+
+// Thêm watcher cho showAddTransactionModal
+watch(() => showAddTransactionModal.value, async (isOpen) => {
+  if (isOpen) {
+    // Khi mở modal, fetch categories và set default dựa vào type hiện tại
+    await fetchCategories();
+    // Set category mặc định dựa vào type
+    newTransaction.value.category = newTransaction.value.type === 'income' 
+      ? currentDefaultIncome.value 
+      : currentDefaultExpense.value;
+  }
 });
 
 // Hàm định dạng ngày cho input
@@ -273,11 +347,11 @@ const addTransaction = async () => {
     
     // Reset form
     newTransaction.value = {
-      type: 'income',
+      type: 'expense',
       amount: '',
       date: formatDateForInput(new Date()),
       description: '',
-      category: 'other_income'
+      category: 'other_expense'
     };
     formattedAmount.value = '';
     
@@ -370,6 +444,9 @@ onMounted(() => {
   } else {
     console.log("Waiting for user authentication before loading data");
   }
+
+  // Gọi fetchCategories khi component được mount
+  fetchCategories();
 });
 
 // Watch cho user authentication status - với immediate: false để tránh chạy ngay
@@ -404,6 +481,115 @@ watch(() => route.path, (newPath) => {
   
   lastPath = newPath;
 });
+
+// Hàm mở quản lý danh mục
+const openCategoryManager = () => {
+  if (categoryManager.value) {
+    categoryManager.value.openModal(newTransaction.value.type);
+  }
+};
+
+// Hàm lấy danh sách danh mục
+const fetchCategories = async () => {
+  if (!user.value) return;
+
+  try {
+    console.log('Fetching categories for user:', user.value.uid);
+    
+    // Lấy danh mục người dùng từ Firestore
+    const q = query(
+      collection(db, 'users', user.value.uid, 'categories')
+    );
+    const querySnapshot = await getDocs(q);
+    
+    // Lấy danh mục từ Firestore và phân loại
+    const userCategories = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      isUserDefined: true // Đánh dấu là danh mục người dùng
+    }));
+    
+    console.log('User categories from Firestore:', userCategories);
+
+    // Phân loại danh mục người dùng
+    const userIncomeCategories = userCategories
+      .filter(cat => cat.type === 'income')
+      .map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        type: 'income',
+        isDefault: cat.isDefault || false,
+        isUserDefined: true
+      }));
+    
+    const userExpenseCategories = userCategories
+      .filter(cat => cat.type === 'expense')
+      .map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        type: 'expense',
+        isDefault: cat.isDefault || false,
+        isUserDefined: true
+      }));
+
+    // Tìm danh mục mặc định từ danh mục người dùng
+    const defaultIncome = userIncomeCategories.find(cat => cat.isDefault);
+    const defaultExpense = userExpenseCategories.find(cat => cat.isDefault);
+
+    // Cập nhật trạng thái mặc định cho danh mục hệ thống
+    const systemIncomeCategories = defaultCategories.income.map(cat => ({
+      ...cat,
+      isDefault: !defaultIncome && cat.id === 'other_income',
+      isUserDefined: false
+    }));
+    
+    const systemExpenseCategories = defaultCategories.expense.map(cat => ({
+      ...cat,
+      isDefault: !defaultExpense && cat.id === 'other_expense',
+      isUserDefined: false
+    }));
+
+    // Kết hợp danh mục người dùng và hệ thống
+    incomeCategories.value = [...userIncomeCategories, ...systemIncomeCategories];
+    expenseCategories.value = [...userExpenseCategories, ...systemExpenseCategories];
+
+    // Cập nhật danh mục mặc định hiện tại
+    if (defaultIncome) {
+      currentDefaultIncome.value = defaultIncome.id;
+    } else {
+      currentDefaultIncome.value = 'other_income';
+    }
+
+    if (defaultExpense) {
+      currentDefaultExpense.value = defaultExpense.id;
+    } else {
+      currentDefaultExpense.value = 'other_expense';
+    }
+
+    // Cập nhật category cho transaction hiện tại nếu đang mở modal
+    if (showAddTransactionModal.value) {
+      newTransaction.value.category = newTransaction.value.type === 'income'
+        ? currentDefaultIncome.value
+        : currentDefaultExpense.value;
+    }
+
+    console.log('Final categories:', {
+      income: incomeCategories.value,
+      expense: expenseCategories.value
+    });
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    showNotification('Không thể tải danh sách danh mục', 'error');
+  }
+};
+
+// Thêm watcher để fetch categories khi component được mount và khi modal mở
+watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
+  if (isOpen && currentUser) {
+    console.log('Modal opened or user changed, fetching categories...');
+    await fetchCategories();
+  }
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -546,13 +732,25 @@ watch(() => route.path, (newPath) => {
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid #eee;
-  background-color: #f9f9f9;
+  transition: all 0.3s ease;
 }
 
-.modal-header h2 {
-  margin: 0;
-  font-size: 20px;
-  color: #333;
+.modal-header.income-header {
+  background-color: #e8f5e9;
+  border-bottom: 1px solid #81C784;
+}
+
+.modal-header.income-header h2 {
+  color: #2E7D32;
+}
+
+.modal-header.expense-header {
+  background-color: #ffebee;
+  border-bottom: 1px solid #ef9a9a;
+}
+
+.modal-header.expense-header h2 {
+  color: #c62828;
 }
 
 .close-button {
@@ -618,15 +816,44 @@ watch(() => route.path, (newPath) => {
   padding: 8px 16px;
   background-color: #f5f5f5;
   border-radius: 6px;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.radio-option.income {
+  background-color: #e8f5e9;
+  color: #2E7D32;
+  border-color: #81C784;
+}
+
+.radio-option.expense {
+  background-color: #ffebee;
+  color: #c62828;
+  border-color: #ef9a9a;
 }
 
 .radio-option:hover {
-  background-color: #e8f5e9;
+  transform: translateY(-1px);
+}
+
+.radio-option.income:hover {
+  background-color: #c8e6c9;
+}
+
+.radio-option.expense:hover {
+  background-color: #ffcdd2;
 }
 
 .radio-option input {
   margin-right: 8px;
-  accent-color: #4CAF50;
+}
+
+.radio-option.income input {
+  accent-color: #2E7D32;
+}
+
+.radio-option.expense input {
+  accent-color: #c62828;
 }
 
 .required {
@@ -777,6 +1004,77 @@ watch(() => route.path, (newPath) => {
     left: 20px;
     right: 20px;
     min-width: auto;
+  }
+}
+
+.category-select {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.category-select select {
+  flex: 1;
+}
+
+.manage-categories-button {
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.manage-categories-button:hover {
+  background-color: #1976D2;
+}
+
+@media (max-width: 768px) {
+  .category-select {
+    flex-direction: column;
+  }
+  
+  .manage-categories-button {
+    width: 100%;
+  }
+}
+
+.manage-categories-icon {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  color: #666;
+  background-color: #f5f5f5;
+}
+
+.manage-categories-icon:hover {
+  transform: rotate(90deg);
+  background-color: #e8f5e9;
+  color: #2E7D32;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+@media (max-width: 768px) {
+  .category-select {
+    flex-direction: row;
+  }
+  
+  .manage-categories-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
   }
 }
 </style> 

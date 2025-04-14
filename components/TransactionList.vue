@@ -120,6 +120,10 @@ const startDate = ref(formatDateForInput(today));
 const endDate = ref(formatDateForInput(today));
 const transactionType = ref('all');
 
+// State cho danh mục
+const categories = ref({});
+const categoriesLoading = ref(false);
+
 // Định nghĩa tên tiếng Việt cho các danh mục
 const categoryNames = {
   // Chi tiêu
@@ -144,8 +148,9 @@ const categoryNames = {
 };
 
 // Hàm lấy tên danh mục tiếng Việt
-const getCategoryName = (categoryKey) => {
-  return categoryNames[categoryKey] || categoryKey;
+const getCategoryName = (categoryId) => {
+  if (!categoryId) return 'Không có danh mục';
+  return categories.value[categoryId]?.name || categoryId;
 };
 
 // Tính toán tổng thu, chi và số dư
@@ -415,28 +420,70 @@ const resetToCurrentMonth = () => {
   fetchTransactions();
 };
 
-// Khởi tạo
+// Hàm lấy danh mục từ Firestore
+const fetchCategories = async () => {
+  if (!user.value) return;
+  
+  try {
+    categoriesLoading.value = true;
+    
+    // Lấy danh mục từ Firestore
+    const q = query(
+      collection(db, 'users', user.value.uid, 'categories')
+    );
+    const querySnapshot = await getDocs(q);
+    
+    // Tạo object map từ id sang category
+    const categoryMap = {};
+    querySnapshot.docs.forEach(doc => {
+      const category = doc.data();
+      categoryMap[doc.id] = category;
+    });
+    
+    // Thêm danh mục mặc định
+    const defaultCategories = {
+      food: { name: 'Ăn uống', type: 'expense' },
+      rent: { name: 'Tiền nhà', type: 'expense' },
+      utilities: { name: 'Hóa đơn dịch vụ', type: 'expense' },
+      transportation: { name: 'Di chuyển', type: 'expense' },
+      entertainment: { name: 'Giải trí', type: 'expense' },
+      shopping: { name: 'Mua sắm', type: 'expense' },
+      healthcare: { name: 'Y tế', type: 'expense' },
+      education: { name: 'Giáo dục', type: 'expense' },
+      debt_payment: { name: 'Trả nợ', type: 'expense' },
+      other_expense: { name: 'Chi tiêu khác', type: 'expense' },
+      salary: { name: 'Lương', type: 'income' },
+      bonus: { name: 'Thưởng', type: 'income' },
+      investment: { name: 'Đầu tư', type: 'income' },
+      gifts: { name: 'Quà tặng', type: 'income' },
+      performance: { name: 'Đi diễn', type: 'income' },
+      other_income: { name: 'Thu nhập khác', type: 'income' }
+    };
+
+    // Kết hợp danh mục người dùng và mặc định
+    categories.value = { ...defaultCategories, ...categoryMap };
+    
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+  } finally {
+    categoriesLoading.value = false;
+  }
+};
+
+// Thêm gọi fetchCategories trong onMounted
 onMounted(async () => {
-  console.log("TransactionList mounted, checking user:", user.value?.uid);
+  console.log("TransactionList mounted");
+  await fetchCategories();
   
-  // Không tự động tải dữ liệu khi mount - để parent component điều khiển việc này
-  // Chỉ cần thiết lập trạng thái khởi tạo
-  isInitialized.value = true;
-  
-  // Thiết lập listener cho auth state để theo dõi đăng xuất
-  authUnsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-    if (!firebaseUser) {
-      // Người dùng đã đăng xuất - xóa dữ liệu
+  // Setup auth listener
+  authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    if (firebaseUser) {
+      await fetchCategories();
+      await fetchTransactions();
+    } else {
       transactions.value = [];
-      console.log("User logged out, cleared transaction data");
     }
   });
-  
-  // Đánh dấu component đã sẵn sàng, nhưng không tải dữ liệu
-  console.log("TransactionList component mounted and ready");
-  
-  // Không cần đặt loading = true ở đây vì chúng ta sẽ để parent component xử lý việc tải dữ liệu
-  loading.value = false;
 });
 
 // Đảm bảo unsubscribe khi component unmounted

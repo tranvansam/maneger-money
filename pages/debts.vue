@@ -65,6 +65,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useAuth } from '~/composables/useAuth';
 import DebtList from '~/components/DebtList.vue';
 
@@ -124,7 +125,47 @@ const handleDebtAdded = (debt) => {
 // Cập nhật lại danh sách khi chuyển tab
 watch(activeTab, (newTab) => {
   console.log(`Chuyển tab sang: ${newTab}`);
+  // Update URL with current tab
+  navigateTo({
+    query: {
+      ...route.query,
+      tab: newTab
+    }
+  });
 });
+
+const route = useRoute();
+
+// Watch route query for add-debt action
+watch(
+  () => route.query,
+  (newQuery) => {
+    if (newQuery.action === 'add-debt') {
+      nextTick(() => {
+        // Set active tab if provided
+        if (newQuery.tab && ['owed', 'lent'].includes(newQuery.tab)) {
+          activeTab.value = newQuery.tab;
+        }
+        
+        // Find active debt list component and open its add modal
+        if (activeTab.value === 'owed' && owedDebtList.value) {
+          owedDebtList.value.openAddDebtModal();
+        } else if (activeTab.value === 'lent' && lentDebtList.value) {
+          lentDebtList.value.openAddDebtModal(); 
+        }
+
+        // Remove action and tab query params
+        const query = {...route.query};
+        delete query.action;
+        delete query.tab;
+        navigateTo({
+          query
+        });
+      });
+    }
+  },
+  { immediate: true }
+);
 
 onMounted(() => {
   console.log("Debts page mounted");

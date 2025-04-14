@@ -518,6 +518,7 @@ import { collection, addDoc, getDocs, updateDoc, doc, query, where, orderBy, Tim
 import { db, auth } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
 import { debounce } from 'lodash';
+import { defineExpose } from 'vue';
 
 const props = defineProps({
   filterType: {
@@ -588,7 +589,7 @@ onMounted(() => {
   console.log('DebtList mounted');
   if (user.value) {
     resetNewDebt();
-    // Không gọi fetchDebts ở đây vì watcher sẽ tự gọi
+  // Không gọi fetchDebts ở đây vì watcher sẽ tự gọi
   }
 });
 
@@ -630,6 +631,8 @@ watch(
     immediate: true // Gọi ngay lần đầu mounted
   }
 );
+// Export các hàm để component cha có thể gọi
+
 
 // Sửa lại các hàm điều hướng tháng
 const previousMonth = () => {
@@ -1565,6 +1568,12 @@ const deleteDebt = async () => {
     modalLoading.value = false;
   }
 };
+
+defineExpose({
+  openAddDebtModal,
+  resetNewDebt,
+  fetchDebts
+});
 </script>
 
 <style scoped>
