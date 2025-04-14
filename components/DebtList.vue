@@ -901,14 +901,9 @@ const resetNewDebt = () => {
 
 // Lấy danh sách nợ
 const fetchDebts = async () => {
+  console.log('Fetching debts sammmm');
   if (!user.value) {
     console.log('Skip fetching: No user');
-    return;
-  }
-
-  // Nếu đang loading thì không fetch nữa
-  if (loading.value) {
-    console.log('Skip fetching: Already loading');
     return;
   }
 
@@ -1079,14 +1074,14 @@ const addDebt = async () => {
     
     showAddDebtModal.value = false;
     
-    // Cập nhật lại danh sách
-    await fetchDebts();
   } catch (error) {
     console.error('Lỗi khi thêm khoản nợ:', error);
     alert(`Không thể thêm khoản nợ mới: ${error.message}`);
   } finally {
+    await fetchDebts();
     loading.value = false;
     modalLoading.value = false;
+
   }
 };
 
@@ -2151,27 +2146,47 @@ defineExpose({
 
 .modal-content {
   background-color: white;
-  padding: 20px;
+  padding: 0;
   border-radius: 8px;
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
-  margin: auto;
-  margin-bottom: env(safe-area-inset-bottom, 20px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.confirm-modal {
+  background-color: white;
+  padding: 0;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 450px;
+  position: relative;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.settlement-modal {
+  background-color: white;
+  padding: 0;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 450px;
+  position: relative;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 @media (max-width: 768px) {
   .modal-overlay {
     padding: 10px;
-    align-items: flex-start;
-    padding-top: 20px;
+    align-items: center;
   }
 
-  .modal-content {
-    max-height: calc(100vh - 100px);
-    margin-bottom: 80px; /* Khoảng cách với thanh menu */
+  .modal-content,
+  .confirm-modal,
+  .settlement-modal {
+    max-height: calc(100vh - 40px);
+    margin: 20px 0;
   }
 }
 
@@ -2181,10 +2196,14 @@ defineExpose({
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid #eee;
+  background-color: white;
+  border-radius: 8px 8px 0 0;
 }
 
 .modal-header h2 {
   margin: 0;
+  font-size: 1.25rem;
+  color: #333;
 }
 
 .close-button {
@@ -2193,11 +2212,33 @@ defineExpose({
   font-size: 24px;
   cursor: pointer;
   color: #757575;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: #f5f5f5;
 }
 
 .modal-body {
   padding: 20px;
-  overflow-y: auto;
+  background-color: white;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #eee;
+  border-radius: 0 0 8px 8px;
 }
 
 .form-group {
@@ -2275,15 +2316,6 @@ defineExpose({
   .recurring-group {
     padding: 12px;
   }
-}
-
-.form-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px 20px;
-  background-color: #f9f9f9;
-  border-radius: 0 0 8px 8px;
 }
 
 .cancel-button {
