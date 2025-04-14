@@ -31,6 +31,11 @@
             <span class="menu-text">Giao dịch</span>
           </div>
           
+          <div class="menu-item" :class="{ 'active': isCurrentRoute('/events') }" @click="navigateTo('/events')">
+            <span class="menu-icon">📅</span>
+            <span class="menu-text">Sự kiện</span>
+          </div>
+          
           <div class="menu-item" :class="{ 'active': isCurrentRoute('/debts') }" @click="navigateTo('/debts')">
             <span class="menu-icon">💸</span>
             <span class="menu-text">Quản lý nợ</span>
@@ -77,6 +82,11 @@
       <div class="mobile-nav-item" :class="{ 'active': isCurrentRoute('/transactions') }" @click="navigateTo('/transactions')">
         <span class="mobile-nav-icon">💰</span>
         <span class="mobile-nav-text">Giao dịch</span>
+      </div>
+      
+      <div class="mobile-nav-item" :class="{ 'active': isCurrentRoute('/events') }" @click="navigateTo('/events')">
+        <span class="mobile-nav-icon">📅</span>
+        <span class="mobile-nav-text">Sự kiện</span>
       </div>
       
       <div class="mobile-nav-item" :class="{ 'active': isCurrentRoute('/debts') }" @click="navigateTo('/debts')">
