@@ -7,26 +7,108 @@
   
       <div class="page-header">
         <h1 class="page-title">Quản lý sự kiện</h1>
-        <button @click="openAddEventModal" class="add-event-button">
-          <span class="button-icon">+</span>
-          Tạo sự kiện mới
-        </button>
+        <div class="header-actions">
+          <div class="search-container">
+            <div class="search-input-wrapper">
+              <i class="fas fa-search search-icon"></i>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Tìm kiếm sự kiện..."
+                class="search-input"
+              />
+            </div>
+          </div>
+          <div v-if="friends.length > 0">
+            <button @click="showAddEventModal = true" class="add-button">
+              <i class="fas fa-plus"></i>
+              Thêm sự kiện
+            </button>
+          </div>
+          <div v-else>
+            <NuxtLink to="/friends" class="add-friends-button">
+              <i class="fas fa-user-plus"></i>
+              Thêm bạn bè
+            </NuxtLink>
+          </div>
+        </div>
       </div>
   
-      <!-- Danh sách sự kiện -->
-      <div class="events-list" v-if="events.length > 0">
-        <div v-for="event in events" :key="event.id" class="event-card" @click="navigateToDetail(event.id)">
+      <!-- No friends message -->
+      <div v-if="friends.length === 0" class="no-friends-message">
+        <i class="fas fa-users"></i>
+        <p>Bạn cần có ít nhất một người bạn để tạo sự kiện</p>
+        <p class="sub-text">Hãy thêm bạn bè để bắt đầu tạo và chia sẻ sự kiện!</p>
+      </div>
+  
+      <!-- Events list with search -->
+      <div v-else class="events-grid">
+        <div v-if="filteredEvents.length === 0" class="no-events-message">
+          <template v-if="searchQuery">
+            <i class="fas fa-search"></i>
+            <p>Không tìm thấy sự kiện nào phù hợp</p>
+          </template>
+          <template v-else>
+            <i class="fas fa-calendar-plus"></i>
+            <p>Chưa có sự kiện nào</p>
+            <p class="sub-text">Hãy tạo sự kiện đầu tiên của bạn!</p>
+          </template>
+        </div>
+        
+        <div v-for="event in filteredEvents" 
+             :key="event.id" 
+             class="event-card" @click="navigateToDetail(event.id)">
           <div class="event-header">
-            <h3 class="event-title">{{ event.name }}</h3>
+            <div class="event-creator">
+              <Avatar 
+                :email="event.createdBy?.email"
+                :name="event.createdBy?.displayName"
+                size="medium"
+                class="creator-avatar"
+                @click.stop="navigateToProfile(event.createdBy.uid)"
+              />
+              <div class="creator-info">
+                <h3 class="event-title">{{ event.name }}</h3>
+                <div class="creator-name" @click.stop="navigateToProfile(event.createdBy.uid)">
+                  {{ event.createdBy?.displayName || event.createdBy?.email }}
+                </div>
+              </div>
+            </div>
             <span class="event-status" :class="{ 'active': !event.isEnded, 'ended': event.isEnded }">
               {{ event.isEnded ? 'Đã kết thúc' : 'Đang diễn ra' }}
             </span>
           </div>
+  
           <p class="event-description">{{ event.description || 'Không có mô tả' }}</p>
+          
+          <div class="event-details">
+            <div class="detail-item">
+              <i class="fas fa-calendar"></i>
+              <span>{{ formatDate(event.startDate) }}</span>
+            </div>
+            <div class="detail-item" v-if="event.location">
+              <i class="fas fa-map-marker-alt"></i>
+              <span>{{ event.location }}</span>
+            </div>
+          </div>
+  
           <div class="event-info">
             <div class="participants">
-              <span class="info-label">Số người tham gia:</span>
-              <span class="info-value">{{ event.participants?.length || 0 }}</span>
+              <div class="participants-avatars">
+                <Avatar 
+                  v-for="participant in event.participants?.slice(0, 3)" 
+                  :key="participant.uid"
+                  :email="participant.email"
+                  :name="participant.displayName"
+                  size="small"
+                  class="participant-avatar"
+                  @click.stop="navigateToProfile(participant.uid)"
+                />
+                <div v-if="event.participants?.length > 3" class="more-participants">
+                  +{{ event.participants.length - 3 }}
+                </div>
+              </div>
+              <span class="info-label">{{ event.participants?.length || 0 }} người tham gia</span>
             </div>
             <div class="total-amount">
               <span class="info-label">Tổng chi tiêu:</span>
@@ -36,87 +118,95 @@
         </div>
       </div>
   
-      <div v-else class="empty-state">
-        <div class="empty-icon">📅</div>
-        <p class="empty-text">Chưa có sự kiện nào được tạo</p>
-        <button @click="openAddEventModal" class="create-first-event">Tạo sự kiện đầu tiên</button>
-      </div>
-  
-      <!-- Modal thêm sự kiện mới -->
-      <div v-if="showAddEventModal" class="modal-overlay">
-        <div class="modal">
+      <!-- Add Event Modal -->
+      <div v-if="showAddEventModal" class="modal-overlay" @click="closeAddEventModal">
+        <div class="modal-content" @click.stop>
           <div class="modal-header">
-            <h2>Tạo sự kiện mới</h2>
-            <button @click="showAddEventModal = false" class="close-button">&times;</button>
+            <h3>Thêm sự kiện mới</h3>
+            <button class="close-button" @click="closeAddEventModal">×</button>
           </div>
-          
           <div class="modal-body">
-            <form @submit.prevent="createEvent">
-              <div class="form-group">
-                <label>Tên sự kiện <span class="required">*</span></label>
-                <input 
-                  type="text" 
-                  v-model="newEvent.name"
-                  required
-                  placeholder="Nhập tên sự kiện"
-                />
-              </div>
-  
-              <div class="form-group">
-                <label>Mô tả</label>
-                <textarea 
-                  v-model="newEvent.description"
-                  placeholder="Mô tả chi tiết về sự kiện"
-                  rows="3"
-                ></textarea>
-              </div>
-  
-              <div class="form-group">
-                <label>Ngày bắt đầu</label>
-                <input 
-                  type="date" 
-                  v-model="newEvent.startDate"
-                  class="date-input"
-                />
-              </div>
-  
-              <div class="form-group">
-                <label>Ngày kết thúc</label>
-                <input 
-                  type="date" 
-                  v-model="newEvent.endDate"
-                  class="date-input"
-                />
-              </div>
-  
-              <div class="form-group">
-                <label>Người tham gia <span class="required">*</span></label>
-                <div class="participants-input">
-                  <input 
-                    type="email"
-                    v-model="participantEmail"
-                    placeholder="Nhập email người tham gia"
+            <div class="form-group">
+              <label>Tiêu đề <span class="required">*</span></label>
+              <input v-model="newEvent.title" type="text" class="form-input" placeholder="Nhập tiêu đề sự kiện">
+            </div>
+            <div class="form-group">
+              <label>Mô tả</label>
+              <textarea v-model="newEvent.description" class="form-input" placeholder="Nhập mô tả sự kiện"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Thời gian bắt đầu</label>
+              <input v-model="newEvent.startDate" type="datetime-local" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Thời gian kết thúc</label>
+              <input v-model="newEvent.endDate" type="datetime-local" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Địa điểm</label>
+              <input v-model="newEvent.location" type="text" class="form-input" placeholder="Nhập địa điểm">
+            </div>
+            <div class="form-group">
+              <label>Mời bạn bè <span class="required">*</span></label>
+              <div class="friends-search">
+                <div class="search-input-wrapper">
+                  <i class="fas fa-search search-icon"></i>
+                  <input
+                    v-model="friendSearchQuery"
+                    type="text"
+                    placeholder="Tìm kiếm bạn bè..."
+                    class="search-input"
                   />
-                  <button type="button" @click="addParticipant" class="add-participant-button">
-                    Thêm
-                  </button>
                 </div>
-                <div class="participants-list" v-if="newEvent.participants.length > 0">
-                  <div v-for="(email, index) in newEvent.participants" :key="index" class="participant-item">
-                    <span>{{ email }}</span>
-                    <button type="button" @click="removeParticipant(index)" class="remove-participant">
-                      &times;
-                    </button>
+              </div>
+              <div class="friends-select">
+                <div v-for="friend in filteredFriends" 
+                     :key="friend.id" 
+                     class="friend-option"
+                     :class="{ selected: selectedFriends.includes(friend.id) }"
+                     @click="toggleFriendSelection(friend.id)">
+                  <Avatar 
+                    :email="friend.email" 
+                    :name="friend.displayName"
+                    size="small"
+                  />
+                  <span class="friend-name">{{ friend.displayName || friend.email }}</span>
+                  <i class="fas fa-check check-icon"></i>
+                </div>
+                <div v-if="filteredFriends.length === 0" class="no-results">
+                  Không tìm thấy bạn bè phù hợp
+                </div>
+              </div>
+              <div class="selected-friends-preview" v-if="selectedFriends.length > 0">
+                <div class="selected-count">
+                  Đã chọn {{ selectedFriends.length }} người
+                </div>
+                <div class="selected-avatars">
+                  <Avatar 
+                    v-for="friendId in selectedFriends.slice(0, 3)" 
+                    :key="friendId"
+                    :email="getFriendById(friendId)?.email"
+                    :name="getFriendById(friendId)?.displayName"
+                    size="small"
+                  />
+                  <div v-if="selectedFriends.length > 3" class="more-selected">
+                    +{{ selectedFriends.length - 3 }}
                   </div>
                 </div>
               </div>
-            </form>
+            </div>
           </div>
-  
-          <div class="form-actions">
-            <button type="button" @click="showAddEventModal = false" class="cancel-button">Hủy</button>
-            <button type="submit" @click="createEvent" class="submit-button" :disabled="isSubmitting">
-              {{ isSubmitting ? 'Đang xử lý...' : 'Tạo sự kiện' }}
+          <div class="modal-footer">
+            <button class="cancel-button" @click="closeAddEventModal">
+              <i class="fas fa-times"></i>
+              Hủy
+            </button>
+            <button 
+              class="submit-button" 
+              :disabled="!isValidEventForm"
+              @click="createEvent">
+              <i class="fas fa-plus"></i>
+              Tạo sự kiện
             </button>
           </div>
         </div>
@@ -125,33 +215,54 @@
   </template>
   
   <script setup>
-  import { ref, onMounted } from 'vue';
-  import { collection, addDoc, query, getDocs, where } from 'firebase/firestore';
+  import { ref, onMounted, computed } from 'vue';
+  import { collection, addDoc, query, getDocs, where, serverTimestamp } from 'firebase/firestore';
   import { db } from '~/plugins/firebase';
   import { useAuth } from '~/composables/useAuth';
+  import { useFriends } from '~/composables/useFriends';
+  import Avatar from '~/components/Avatar.vue';
   
   definePageMeta({
     middleware: 'auth'
   });
   
   const { user } = useAuth();
+  const { friends, loading: loadingFriends, fetchFriends } = useFriends();
   const loading = ref(true);
   const events = ref([]);
   const showAddEventModal = ref(false);
   const isSubmitting = ref(false);
   const participantEmail = ref('');
+  const showFriendsList = ref(false);
+  const selectedFriends = ref([]);
+  const searchQuery = ref('');
+  const friendSearchQuery = ref('');
   
-  // Khởi tạo sự kiện mới
+  // Add formatDate function
+  const formatDate = (date) => {
+    if (!date) return '';
+    if (typeof date === 'string') {
+      date = new Date(date);
+    }
+    return new Intl.DateTimeFormat('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  };
+  
+  // Initialize new event with proper structure
   const newEvent = ref({
-    name: '',
+    title: '',
     description: '',
+    location: '',
+    startDate: null,
+    endDate: null,
     participants: [],
     totalAmount: 0,
-    isEnded: false,
-    createdAt: null,
-    createdBy: null,
-    startDate: null,
-    endDate: null
+    isEnded: false
   });
   
   // Format tiền tệ
@@ -189,66 +300,83 @@
     showAddEventModal.value = true;
   };
   
-  // Tạo sự kiện mới
+  // Create event function
   const createEvent = async () => {
-    if (!user.value) return;
+    if (!user.value || !isValidEventForm.value) return;
     
     try {
-      // Thêm người tạo vào danh sách người tham gia
-      const participants = [user.value.email, ...newEvent.value.participants];
-      
+      // Get selected friends' data
+      const selectedFriendsData = selectedFriends.value.map(friendId => {
+        const friend = getFriendById(friendId);
+        return {
+          uid: friend.id,
+          email: friend.email,
+          displayName: friend.displayName || friend.email,
+          photoURL: friend.photoURL
+        };
+      });
+
+      // Add creator to participants
+      const creatorData = {
+        uid: user.value.uid,
+        email: user.value.email,
+        displayName: user.value.displayName || user.value.email,
+        photoURL: user.value.photoURL
+      };
+
+      // Prepare event data
       const eventData = {
-        name: newEvent.value.name,
-        description: newEvent.value.description,
-        participants: participants,
-        creator: user.value.email,
-        createdAt: new Date(),
-        totalAmount: 0,
-        isEnded: false,
+        name: newEvent.value.title,
+        description: newEvent.value.description || '',
+        location: newEvent.value.location || '',
         startDate: newEvent.value.startDate ? new Date(newEvent.value.startDate) : null,
-        endDate: newEvent.value.endDate ? new Date(newEvent.value.endDate) : null
-      };
-      
-      const docRef = await addDoc(
-        collection(db, 'events'),
-        eventData
-      );
-      
-      // Reset form
-      newEvent.value = {
-        name: '',
-        description: '',
-        participants: [],
+        endDate: newEvent.value.endDate ? new Date(newEvent.value.endDate) : null,
+        participants: [creatorData, ...selectedFriendsData],
+        createdBy: creatorData,
         totalAmount: 0,
         isEnded: false,
-        createdAt: null,
-        createdBy: null,
-        startDate: null,
-        endDate: null
+        createdAt: serverTimestamp()
       };
-  
+
+      // Add to Firestore
+      await addDoc(collection(db, 'events'), eventData);
+
+      // Reset form and close modal
+      resetForm();
       showAddEventModal.value = false;
+
+      // Refresh events list
       await fetchEvents();
     } catch (error) {
-      console.error('Error adding event:', error);
+      console.error('Error creating event:', error);
+      alert('Có lỗi xảy ra khi tạo sự kiện. Vui lòng thử lại.');
     }
   };
   
-  // Lấy danh sách sự kiện
+  // Update fetchEvents function
   const fetchEvents = async () => {
     if (!user.value) return;
-  
+
     loading.value = true;
     try {
+      const eventsRef = collection(db, 'events');
       const q = query(
-        collection(db, 'events'),
-        where('participants', 'array-contains', user.value.email)
+        eventsRef,
+        where('participants', 'array-contains', {
+          uid: user.value.uid,
+          email: user.value.email,
+          displayName: user.value.displayName || user.value.email,
+          photoURL: user.value.photoURL
+        })
       );
       
       const querySnapshot = await getDocs(q);
       events.value = querySnapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+        startDate: doc.data().startDate?.toDate(),
+        endDate: doc.data().endDate?.toDate()
       }));
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -262,9 +390,110 @@
     navigateTo(`/events/${eventId}`);
   };
   
-  onMounted(() => {
+  // Add friend to participants
+  const addFriendToParticipants = (friend) => {
+    if (!newEvent.value.participants.includes(friend.email)) {
+      newEvent.value.participants.push(friend.email);
+      selectedFriends.value.push(friend.id);
+    }
+  };
+  
+  // Remove friend from participants
+  const removeFriendFromParticipants = (friend) => {
+    const emailIndex = newEvent.value.participants.indexOf(friend.email);
+    if (emailIndex > -1) {
+      newEvent.value.participants.splice(emailIndex, 1);
+      const friendIndex = selectedFriends.value.indexOf(friend.id);
+      if (friendIndex > -1) {
+        selectedFriends.value.splice(friendIndex, 1);
+      }
+    }
+  };
+  
+  // Toggle friend selection
+  const toggleFriendSelection = (friendId) => {
+    const index = selectedFriends.value.indexOf(friendId);
+    if (index === -1) {
+      selectedFriends.value.push(friendId);
+    } else {
+      selectedFriends.value.splice(index, 1);
+    }
+  };
+  
+  // Reset form with friends
+  const resetForm = () => {
+    newEvent.value = {
+      title: '',
+      description: '',
+      location: '',
+      startDate: null,
+      endDate: null,
+      participants: [],
+      totalAmount: 0,
+      isEnded: false
+    };
+    selectedFriends.value = [];
+    participantEmail.value = '';
+  };
+  
+  const navigateToProfile = (uid) => {
+    navigateTo(`/profile/${uid}`);
+  };
+  
+  // Add computed for filtered events
+  const filteredEvents = computed(() => {
+    if (!searchQuery.value) return events.value;
+    
+    const query = searchQuery.value.toLowerCase().trim();
+    return events.value.filter(event => {
+      return event.name.toLowerCase().includes(query) ||
+             event.description.toLowerCase().includes(query) ||
+             event.location.toLowerCase().includes(query);
+    });
+  });
+  
+  // Add computed for filtered friends
+  const filteredFriends = computed(() => {
+    if (!friendSearchQuery.value) return friends.value;
+    
+    const query = friendSearchQuery.value.toLowerCase().trim();
+    return friends.value.filter(friend => {
+      return friend.displayName?.toLowerCase().includes(query) ||
+             friend.email.toLowerCase().includes(query);
+    });
+  });
+  
+  // Add helper function to get friend by id
+  const getFriendById = (friendId) => {
+    return friends.value.find(friend => friend.id === friendId);
+  };
+  
+  // Update form validation
+  const isValidEventForm = computed(() => {
+    return newEvent.value.title &&
+           selectedFriends.value.length > 0;
+  });
+  
+  // Update close modal function
+  const closeAddEventModal = () => {
+    showAddEventModal.value = false;
+    newEvent.value = {
+      title: '',
+      description: '',
+      location: '',
+      startDate: null,
+      endDate: null,
+      participants: [],
+      totalAmount: 0,
+      isEnded: false
+    };
+    selectedFriends.value = [];
+    friendSearchQuery.value = '';
+  };
+  
+  onMounted(async () => {
     if (user.value) {
-      fetchEvents();
+      await Promise.all([fetchEvents(), fetchFriends()]);
     }
   });
   </script>
@@ -281,11 +510,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 30px;
-    background-color: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
   }
   
   .page-title {
@@ -296,10 +523,44 @@
     padding-left: 10px;
   }
   
-  .add-event-button {
+  .header-actions {
     display: flex;
+    gap: 16px;
     align-items: center;
-    gap: 8px;
+  }
+  
+  .search-container {
+    min-width: 300px;
+  }
+  
+  .search-input-wrapper {
+    position: relative;
+  }
+  
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #666;
+  }
+  
+  .search-input {
+    width: 100%;
+    padding: 10px 12px 10px 36px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  
+  .search-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 2px rgba(76,175,80,0.1);
+  }
+  
+  .add-button {
     padding: 10px 20px;
     background-color: #4CAF50;
     color: white;
@@ -310,16 +571,29 @@
     transition: all 0.2s;
   }
   
-  .add-event-button:hover {
+  .add-button:hover {
     background-color: #45a049;
-    transform: translateY(-1px);
   }
   
-  .button-icon {
-    font-size: 20px;
+  .add-friends-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
   }
   
-  .events-list {
+  .add-friends-button:hover {
+    background: #45a049;
+  }
+  
+  .events-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 20px;
@@ -400,40 +674,154 @@
     font-weight: 500;
   }
   
-  .empty-state {
+  .no-friends-message,
+  .no-events-message {
     text-align: center;
     padding: 40px;
-    background-color: white;
+    background: white;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   }
   
-  .empty-icon {
+  .no-friends-message i,
+  .no-events-message i {
     font-size: 48px;
+    color: #999;
     margin-bottom: 16px;
   }
   
-  .empty-text {
+  .sub-text {
     color: #666;
-    margin-bottom: 20px;
+    font-size: 14px;
+    margin-top: 8px;
   }
   
-  .create-first-event {
-    padding: 10px 24px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
+  .friends-search {
+    margin-bottom: 12px;
+  }
+  
+  .friends-search .search-input-wrapper {
+    margin-bottom: 8px;
+  }
+  
+  .friends-search .search-input {
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    font-size: 14px;
+  }
+  
+  .selected-friends-preview {
+    margin-top: 12px;
+    padding: 8px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .selected-count {
+    font-size: 14px;
+    color: #666;
+  }
+  
+  .selected-avatars {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .more-selected {
+    background: #e0e0e0;
+    color: #666;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 12px;
+  }
+  
+  .no-results {
+    text-align: center;
+    padding: 16px;
+    color: #666;
+    font-size: 14px;
+  }
+  
+  .required {
+    color: #f44336;
+    margin-left: 4px;
+  }
+  
+  .friends-select {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px;
+  }
+  
+  .friend-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 16px;
     transition: all 0.2s;
+    position: relative;
+    padding-right: 40px; /* Space for the checkmark */
   }
   
-  .create-first-event:hover {
-    background-color: #45a049;
+  .friend-option:hover {
+    background: #f5f5f5;
   }
   
-  /* Modal styles */
+  .friend-option.selected {
+    background: #e8f5e9;
+  }
+  
+  .friend-name {
+    flex: 1;
+  }
+  
+  .check-icon {
+    position: absolute;
+    right: 12px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4CAF50;
+    opacity: 0;
+    transform: scale(0);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .friend-option.selected .check-icon {
+    opacity: 1;
+    transform: scale(1);
+  }
+  
+  /* Add a subtle border when hovering */
+  .friend-option:hover:not(.selected) {
+    border: 1px solid #e0e0e0;
+    padding: 7px 39px 7px 7px; /* Adjust padding to account for border */
+  }
+  
+  /* Add a green border when selected */
+  .friend-option.selected {
+    border: 1px solid #4CAF50;
+    padding: 7px 39px 7px 7px;
+  }
+  
+  /* Add checkmark background */
+  .friend-option.selected .check-icon {
+    background: #4CAF50;
+    color: white;
+    border-radius: 50%;
+    padding: 4px;
+  }
+  
   .modal-overlay {
     position: fixed;
     top: 0;
@@ -444,10 +832,10 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 9999;
   }
   
-  .modal {
+  .modal-content {
     background-color: white;
     border-radius: 10px;
     width: 90%;
@@ -456,6 +844,9 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    animation: modal-appear 0.3s ease;
+    position: relative;
+    z-index: 10000;
   }
   
   .modal-header {
@@ -465,9 +856,12 @@
     padding: 16px 20px;
     border-bottom: 1px solid #eee;
     background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10002;
   }
   
-  .modal-header h2 {
+  .modal-header h3 {
     margin: 0;
     font-size: 20px;
     color: #333;
@@ -484,6 +878,9 @@
   .modal-body {
     padding: 20px;
     overflow-y: auto;
+    flex: 1;
+    position: relative;
+    z-index: 10001;
   }
   
   .form-group {
@@ -511,125 +908,204 @@
     min-height: 80px;
   }
   
-  .participants-input {
-    display: flex;
-    gap: 8px;
-  }
-  
-  .participants-input input {
-    flex: 1;
-  }
-  
-  .add-participant-button {
-    padding: 10px 20px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  
-  .participants-list {
-    margin-top: 12px;
-  }
-  
-  .participant-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background-color: #f5f5f5;
-    border-radius: 4px;
-    margin-bottom: 8px;
-  }
-  
-  .remove-participant {
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    font-size: 18px;
-  }
-  
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
+  .modal-footer {
     padding: 16px 20px;
     border-top: 1px solid #eee;
-    background-color: white;
+    display: flex;
+    justify-content: flex-end;
+    gap: 16px;
+    background: white;
+    position: sticky;
+    bottom: 0;
+    z-index: 10002;
+  }
+  
+  .cancel-button,
+  .submit-button {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
   }
   
   .cancel-button {
-    padding: 10px 20px;
     background-color: #f5f5f5;
+    color: #666;
+    border: 1px solid #ddd;
+  }
+  
+  .cancel-button:hover {
+    background-color: #e0e0e0;
     color: #333;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
   }
   
   .submit-button {
-    padding: 10px 20px;
     background-color: #4CAF50;
     color: white;
     border: none;
-    border-radius: 4px;
-    cursor: pointer;
+  }
+  
+  .submit-button:hover:not(:disabled) {
+    background-color: #45a049;
+    transform: translateY(-1px);
   }
   
   .submit-button:disabled {
     background-color: #a5d6a7;
     cursor: not-allowed;
+    transform: none;
   }
   
-  .required {
-    color: #f44336;
+  .event-creator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   
-  .date-input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 16px;
-    background-color: white;
+  .creator-avatar {
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  
+  .creator-avatar:hover {
+    transform: scale(1.1);
+  }
+  
+  .creator-info {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .creator-name {
+    font-size: 14px;
+    color: #666;
     cursor: pointer;
   }
   
-  .date-input:hover {
-    border-color: #4CAF50;
+  .creator-name:hover {
+    text-decoration: underline;
   }
   
-  .date-input:focus {
-    outline: none;
-    border-color: #4CAF50;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+  .participants-avatars {
+    display: flex;
+    align-items: center;
+  }
+  
+  .participant-avatar {
+    margin-right: -10px;
+    transition: transform 0.2s;
+    cursor: pointer;
+  }
+  
+  .participant-avatar:hover {
+    transform: scale(1.1);
+    z-index: 1;
+  }
+  
+  .more-participants {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #e0e0e0;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    border: 2px solid #fff;
+    margin-left: -10px;
+  }
+  
+  .event-details {
+    display: flex;
+    gap: 16px;
+    margin: 12px 0;
+  }
+  
+  .detail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #666;
+    font-size: 14px;
+  }
+  
+  .detail-item i {
+    color: #4CAF50;
   }
   
   @media (max-width: 768px) {
-    .events-page {
-      padding: 15px;
-    }
-  
     .page-header {
       flex-direction: column;
-      gap: 15px;
       align-items: stretch;
     }
   
-    .add-event-button {
+    .header-actions {
+      flex-direction: column;
+    }
+  
+    .search-container {
+      min-width: 100%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .modal-overlay {
+      align-items: flex-end;
+      background-color: rgba(0, 0, 0, 0.7);
+    }
+
+    .modal-content {
       width: 100%;
+      max-width: 100%;
+      height: 100vh;
+      max-height: 90vh;
+      margin: 0;
+      border-radius: 20px 20px 0 0;
+      animation: slide-up 0.3s ease;
+    }
+
+    .modal-header {
+      padding: 20px;
+      background: white;
+    }
+
+    .modal-footer {
+      padding: 16px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    }
+
+    .cancel-button,
+    .submit-button {
+      flex: 1;
       justify-content: center;
+      padding: 14px 24px;
+      font-size: 16px;
     }
-  
-    .events-list {
-      grid-template-columns: 1fr;
+  }
+
+  @keyframes slide-up {
+    from {
+      transform: translateY(100%);
     }
-  
-    .modal {
-      width: 95%;
-      max-height: 95vh;
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes modal-appear {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
   </style> 

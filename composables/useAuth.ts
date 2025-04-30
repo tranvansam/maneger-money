@@ -2,6 +2,8 @@ import { ref, computed, onUnmounted } from 'vue';
 import { auth, loginUser, registerUser, logoutUser, getCurrentUser, updateUserProfile } from '~/plugins/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { db } from '~/plugins/firebase';
 
 // Shared auth state across the app
 const user = ref<User | null>(null);
@@ -49,13 +51,22 @@ export const useAuth = () => {
     error.value = null;
     try {
       const userCredential = await registerUser(email, password);
-      // We don't need to set user.value here as the auth listener will update it
       
       // Update display name if provided
       if (displayName && userCredential.user) {
         await updateUserProfile(userCredential.user, { displayName });
         console.log("Updated user with display name:", displayName);
       }
+
+      // Create user document in Firestore
+      const userDoc = doc(db, 'users', userCredential.user.uid);
+      await setDoc(userDoc, {
+        uid: userCredential.user.uid,
+        email: userCredential.user.email,
+        displayName: displayName || null,
+        photoURL: userCredential.user.photoURL || null,
+        createdAt: new Date(),
+      });
       
       return userCredential;
     } catch (err) {
@@ -84,7 +95,21 @@ export const useAuth = () => {
     error.value = null;
     try {
       const userCredential = await loginUser(email, password);
-      // We don't need to set user.value here as the auth listener will update it
+      
+      // Check if user document exists in Firestore, if not create it
+      const userDoc = doc(db, 'users', userCredential.user.uid);
+      const userSnapshot = await getDoc(userDoc);
+      
+      if (!userSnapshot.exists()) {
+        await setDoc(userDoc, {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email,
+          displayName: userCredential.user.displayName || null,
+          photoURL: userCredential.user.photoURL || null,
+          createdAt: new Date(),
+        });
+      }
+      
       return userCredential;
     } catch (err) {
       console.error('Login error:', err);

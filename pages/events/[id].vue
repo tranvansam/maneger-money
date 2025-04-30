@@ -50,11 +50,20 @@
         <div class="participants-section">
           <h2>Người tham gia ({{ event.participants?.length || 0 }})</h2>
           <div class="participants-list">
-            <div v-for="(participant, index) in event.participants" 
-                 :key="index" 
-                 class="participant-card">
-              <span class="participant-icon">👤</span>
-              <span class="participant-email">{{ participant }}</span>
+            <div v-for="participant in event.participants" 
+                 :key="participant.uid" 
+                 class="participant-card"
+                 @click="navigateToProfile(participant.uid)">
+              <Avatar 
+                :email="participant.email"
+                :name="participant.displayName"
+                size="medium"
+                class="participant-avatar"
+              />
+              <div class="participant-info">
+                <span class="participant-name">{{ participant.displayName || participant.email }}</span>
+                <span class="participant-email" v-if="participant.displayName">{{ participant.email }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -107,11 +116,24 @@
             <div class="transaction-content">
               <div class="transaction-main">
                 <div class="transaction-info">
-                  <h3 class="transaction-description">{{ transaction.description }}</h3>
-                  <p class="transaction-meta">
-                    <span class="date">{{ formatDate(transaction.date) }}</span>
-                    <span class="creator">{{ transaction.createdBy.displayName || transaction.createdBy.email }}</span>
-                  </p>
+                  <div class="transaction-header">
+                    <Avatar 
+                      :email="transaction.createdBy.email"
+                      :name="transaction.createdBy.displayName"
+                      size="small"
+                      class="transaction-avatar"
+                      @click.stop="navigateToProfile(transaction.createdBy.uid)"
+                    />
+                    <div class="transaction-meta">
+                      <h3 class="transaction-description">{{ transaction.description }}</h3>
+                      <div class="transaction-details">
+                        <span class="date">{{ formatDate(transaction.date) }}</span>
+                        <span class="creator" @click.stop="navigateToProfile(transaction.createdBy.uid)">
+                          {{ transaction.createdBy.displayName || transaction.createdBy.email }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="transaction-amount">
                   <span :class="transaction.type">
@@ -249,6 +271,7 @@ import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, Timestamp } from 'fire
 import { db } from '~/plugins/firebase';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '~/composables/useAuth';
+import Avatar from '~/components/Avatar.vue';
 
 definePageMeta({
   middleware: 'auth'
@@ -496,6 +519,12 @@ const fetchEventDetails = async () => {
   }
 };
 
+const navigateToProfile = (uid) => {
+  if (uid) {
+    router.push(`/profile/${uid}`);
+  }
+};
+
 onMounted(() => {
   fetchEventDetails();
 });
@@ -652,10 +681,11 @@ onMounted(() => {
 }
 
 .participants-section {
-  background-color: white;
+  background: white;
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  margin-top: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .participants-section h2 {
@@ -665,27 +695,59 @@ onMounted(() => {
 }
 
 .participants-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
 }
 
 .participant-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
-  background-color: #f5f5f5;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
 }
 
-.participant-icon {
-  font-size: 20px;
+.participant-card:hover {
+  background: #f0f0f0;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.participant-card:active {
+  transform: translateY(0);
+  background: #e9ecef;
+}
+
+.participant-avatar {
+  flex-shrink: 0;
+}
+
+.participant-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.participant-name {
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .participant-email {
-  font-size: 14px;
-  color: #333;
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .transactions-section {
@@ -847,19 +909,57 @@ onMounted(() => {
   flex: 1;
 }
 
+.transaction-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.transaction-avatar {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.transaction-avatar:hover {
+  transform: scale(1.1);
+}
+
+.transaction-meta {
+  flex: 1;
+  min-width: 0;
+}
+
 .transaction-description {
   font-size: 16px;
   font-weight: 500;
   color: #333;
-  margin: 0 0 4px 0;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.transaction-meta {
-  font-size: 14px;
-  color: #666;
-  margin: 0;
+.transaction-details {
   display: flex;
+  align-items: center;
   gap: 12px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.creator {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.creator:hover {
+  color: #4CAF50;
+  text-decoration: underline;
+}
+
+.date {
+  color: #888;
 }
 
 .transaction-amount {

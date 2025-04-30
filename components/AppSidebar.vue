@@ -41,6 +41,11 @@
             <span class="menu-text">Quản lý nợ</span>
           </div>
           
+          <div class="menu-item" :class="{ 'active': isCurrentRoute('/friends') }" @click="navigateTo('/friends')">
+            <span class="menu-icon">👥</span>
+            <span class="menu-text">Bạn bè</span>
+          </div>
+          
           <!-- PC Only Menu Items -->
           <div class="pc-only-menu">
             <div class="menu-item" :class="{ 'active': isCurrentRoute('/reports') }" @click="navigateTo('/reports')">
@@ -92,6 +97,11 @@
       <div class="mobile-nav-item" :class="{ 'active': isCurrentRoute('/debts') }" @click="navigateTo('/debts')">
         <span class="mobile-nav-icon">💸</span>
         <span class="mobile-nav-text">Nợ</span>
+      </div>
+      
+      <div class="mobile-nav-item" :class="{ 'active': isCurrentRoute('/friends') }" @click="navigateTo('/friends')">
+        <span class="mobile-nav-icon">👥</span>
+        <span class="mobile-nav-text">Bạn bè</span>
       </div>
       
       <button class="mobile-nav-item quick-add-btn" @click="openQuickAdd">

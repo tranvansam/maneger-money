@@ -1,8 +1,9 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, connectAuthEmulator, updateProfile, type User, type UserInfo } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, connectAuthEmulator, updateProfile, type Auth, type User, type UserInfo } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 // Your web app's Firebase configuration from .env via runtimeConfig
 const firebaseConfig = {
@@ -16,10 +17,11 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase only on client side and only if not already initialized
-let app;
+let app: FirebaseApp;
 let analytics;
-let auth;
-let db;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 
 if (process.client) {
   try {
@@ -35,6 +37,7 @@ if (process.client) {
     // Get auth and analytics instances
     auth = getAuth(app);
     db = getFirestore(app);
+    storage = getStorage(app);
     
     // Set tenantId to null explicitly
     if (auth) {
@@ -56,7 +59,7 @@ if (process.client) {
   }
 }
 
-export { auth, analytics, db };
+export { auth, analytics, db, storage };
 
 // Authentication functions
 export const registerUser = async (email: string, password: string) => {

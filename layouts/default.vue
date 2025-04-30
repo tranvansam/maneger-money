@@ -14,20 +14,26 @@
         
         <!-- User info area -->
         <div class="user-area">
-          <div class="user-menu" @click="toggleUserMenu">
-            <span class="user-name">{{ user?.displayName || user?.email }}</span>
-            <span class="user-icon">👤</span>
-            
-            <div class="user-dropdown" v-if="showUserMenu">
-              <div class="dropdown-item">
-                <span class="item-icon">✉️</span>
-                <span>{{ user?.email }}</span>
-              </div>
-              <div class="dropdown-divider"></div>
-              <div class="dropdown-item" @click="handleLogout">
-                <span class="item-icon">🚪</span>
+          <div class="user-menu" v-if="user">
+            <div class="user-info" @click="toggleUserMenu">
+              <Avatar 
+                :email="user.email"
+                :name="user.displayName"
+                size="small"
+                class="user-avatar"
+              />
+              <span class="user-name">{{ user.displayName || user.email }}</span>
+              <i class="fas fa-chevron-down menu-arrow" :class="{ 'rotated': showUserMenu }"></i>
+            </div>
+            <div v-show="showUserMenu" class="menu-items">
+              <NuxtLink :to="`/profile/${user.uid}`" class="menu-item" @click="showUserMenu = false">
+                <i class="fas fa-user"></i>
+                <span>Hồ sơ của tôi</span>
+              </NuxtLink>
+              <button @click="handleLogout" class="menu-item">
+                <i class="fas fa-sign-out-alt"></i>
                 <span>Đăng xuất</span>
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -67,6 +73,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import AppSidebar from '~/components/AppSidebar.vue';
+import Avatar from '~/components/Avatar.vue';
 import { useAuth } from '~/composables/useAuth';
 import { useRoute } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -107,8 +114,8 @@ const setupAuthListener = () => {
 // Handle logout
 const handleLogout = async () => {
   try {
-    await logout();
     showUserMenu.value = false;
+    await logout();
     navigateTo('/login');
   } catch (error) {
     console.error('Logout error:', error);
@@ -135,7 +142,7 @@ const openQuickAddModal = () => {
 // Click outside to close user menu
 const handleClickOutside = (event) => {
   const userMenu = document.querySelector('.user-menu');
-  if (userMenu && !userMenu.contains(event.target) && showUserMenu.value) {
+  if (userMenu && !userMenu.contains(event.target)) {
     showUserMenu.value = false;
   }
 };
@@ -209,18 +216,19 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  width: 100%;
+  min-height: 100vh;
+  background-color: #f5f7fa;
 }
 
 .app-header {
-  background-color: white;
-  padding: 12px 20px;
   display: flex;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  padding: 0.5rem 1rem;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 100;
 }
 
 .menu-button {
@@ -228,119 +236,142 @@ body {
   border: none;
   font-size: 24px;
   cursor: pointer;
-  margin-right: 15px;
-  color: #555;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 8px;
-  border-radius: 4px;
-  transition: all 0.2s;
+  color: #666;
+  margin-right: 1rem;
 }
 
-.menu-button:hover {
-  background-color: #f0f0f0;
-  transform: scale(1.05);
-}
-
-.menu-button:active {
-  background-color: #e8e8e8;
-  transform: scale(0.95);
+.menu-icon {
+  display: block;
+  line-height: 1;
 }
 
 .app-title {
-  font-size: 18px;
   margin: 0;
-  color: #4CAF50;
-  font-weight: 600;
+  font-size: 1.25rem;
+  color: #333;
   flex: 1;
 }
 
-/* User area styles */
 .user-area {
-  margin-left: auto;
   position: relative;
 }
 
 .user-menu {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 40px;
-  background-color: #f0f7f0;
-  transition: background-color 0.2s;
   position: relative;
+  cursor: pointer;
 }
 
-.user-menu:hover {
-  background-color: #e8f5e9;
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.user-info:hover {
+  background-color: #f5f5f5;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .user-name {
-  margin-right: 8px;
-  font-weight: 500;
-  color: #2E7D32;
-  max-width: 120px;
+  font-size: 14px;
+  color: #333;
+  max-width: 150px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.user-icon {
-  font-size: 18px;
+.menu-arrow {
+  font-size: 12px;
+  color: #666;
+  transition: transform 0.2s;
 }
 
-.user-dropdown {
+.menu-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.menu-items {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   right: 0;
-  margin-top: 8px;
-  width: 220px;
   background-color: white;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
   padding: 8px 0;
-  overflow: hidden;
+  z-index: 1000;
+  opacity: 0;
+  transform: translateY(-10px);
+  animation: slideDown 0.2s ease forwards;
 }
 
-.dropdown-item {
-  padding: 10px 16px;
+@keyframes slideDown {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menu-item {
   display: flex;
   align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
   color: #333;
-  transition: background-color 0.2s;
+  text-decoration: none;
+  transition: all 0.2s;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
   cursor: pointer;
+  font-size: 14px;
 }
 
-.dropdown-item:hover {
+.menu-item:hover {
   background-color: #f5f5f5;
+  padding-left: 20px;
 }
 
-.item-icon {
-  margin-right: 12px;
-  font-size: 16px;
-}
-
-.dropdown-divider {
-  height: 1px;
-  background-color: #eaeaea;
-  margin: 8px 0;
+.menu-item i {
+  width: 16px;
+  color: #666;
 }
 
 .page-content {
   flex: 1;
-  padding: 0;
-  background-color: #f5f7fa;
+  padding: 1rem;
+  overflow-y: auto;
 }
 
-/* Mobile navigation adjustments */
-.app-layout.has-mobile-nav .page-content {
-  padding-bottom: 70px; /* Space for mobile navigation bar */
+/* Mobile styles */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0.5rem;
+  }
+
+  .user-name {
+    display: none;
+  }
+
+  .menu-items {
+    right: -8px;
+  }
 }
 
-/* Quick Add Modal */
+/* Quick Add Modal styles */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -351,16 +382,15 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 2100;
+  z-index: 1000;
 }
 
-.modal {
-  background-color: white;
+.quick-add-modal {
+  background: white;
   border-radius: 12px;
   width: 90%;
-  max-width: 320px;
+  max-width: 400px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .modal-header {
@@ -369,7 +399,6 @@ body {
   align-items: center;
   padding: 16px;
   border-bottom: 1px solid #eee;
-  background-color: #f9f9f9;
 }
 
 .modal-header h2 {
@@ -382,8 +411,10 @@ body {
   background: none;
   border: none;
   font-size: 24px;
+  color: #666;
   cursor: pointer;
-  color: #757575;
+  padding: 0;
+  line-height: 1;
 }
 
 .modal-body {
@@ -392,8 +423,8 @@ body {
 
 .quick-action-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
 }
 
 .quick-action-button {
@@ -402,37 +433,24 @@ body {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background-color: #f5f5f5;
+  background: #f8f9fa;
   border-radius: 8px;
   text-decoration: none;
   color: #333;
-  font-weight: 500;
-  transition: background-color 0.2s, transform 0.2s;
-  text-align: center;
+  transition: all 0.2s;
 }
 
 .quick-action-button:hover {
-  background-color: #e8f5e9;
+  background: #f0f0f0;
   transform: translateY(-2px);
 }
 
 .quick-action-icon {
-  font-size: 28px;
+  font-size: 24px;
   margin-bottom: 8px;
 }
 
-@media (max-width: 768px) {
-  .app-header {
-    padding: 10px 15px;
-  }
-  
-  .quick-action-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .modal {
-    max-height: 90vh;
-    overflow-y: auto;
-  }
+.has-mobile-nav {
+  padding-bottom: 60px;
 }
 </style> 
