@@ -42,8 +42,10 @@
           <button 
             @click="activeTab = 'discussion'"
             :class="['tab-btn', { active: activeTab === 'discussion' }]"
+            style="position: relative;"
           >
             Thảo luận
+            <span v-if="unreadMessagesCount > 0" class="badge-unread">{{ unreadMessagesCount }}</span>
           </button>
         </div>
       </div>
@@ -315,24 +317,23 @@
 
         <div class="discussion-content">
           <div class="messages-container" ref="messagesContainer">
-            <div v-for="message in messages" :key="message.id" class="message-item" :class="{ 'own-message': message.createdBy.uid === user.value?.uid }">
-              <div class="message-header">
-                <Avatar 
-                  :email="message.createdBy.email"
-                  :name="message.createdBy.displayName"
-                  size="small"
-                  class="message-avatar"
-                  @click="navigateToProfile(message.createdBy.uid)"
-                />
-                <div class="message-meta">
-                  <span class="message-author">{{ message.createdBy.displayName || message.createdBy.email }}</span>
-                  <span class="message-time">{{ formatMessageTime(message.createdAt) }}</span>
+            <template v-for="group in groupedMessages" :key="group.type ? 'date-' + group.date : group.messages[0].id">
+              <div v-if="group.type === 'date'" class="chat-date-separator">
+                {{ group.date.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'long', year: 'numeric' }) }}
+              </div>
+              <div v-else :class="['chat-group', group.isOwn ? 'own-group' : '']">
+                <div class="chat-group-header" v-if="!group.isOwn">
+                  <Avatar :email="group.user.email" :name="group.user.displayName" size="small" class="message-avatar" @click="navigateToProfile(group.user.uid)" />
+                  <span class="message-author">{{ group.user.displayName || group.user.email }}</span>
+                </div>
+                <div class="chat-bubbles">
+                  <div v-for="(msg, mIdx) in group.messages" :key="msg.id" :class="['chat-bubble', group.isOwn ? 'own-bubble' : '', mIdx === 0 ? 'first' : '', mIdx === group.messages.length-1 ? 'last' : '']">
+                    <span class="bubble-content">{{ msg.content }}</span>
+                    <span v-if="mIdx === group.messages.length-1" class="bubble-time">{{ formatMessageTime(msg.createdAt) }}</span>
+                  </div>
                 </div>
               </div>
-              <div class="message-content">
-                {{ message.content }}
-              </div>
-            </div>
+            </template>
             <button v-if="showScrollToBottom" class="scroll-to-bottom-btn" @click="scrollToBottom" title="Xuống cuối">
               <i class="fas fa-arrow-down"></i>
             </button>
@@ -664,7 +665,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue';
+import { ref, onMounted, computed, nextTick, onUnmounted, watch } from 'vue';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, Timestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '~/plugins/firebase';
 import { useRoute, useRouter } from 'vue-router';
@@ -692,26 +693,6 @@ const showPlanModal = ref(false);
 const showDeletePlanModal = ref(false);
 const isEditingPlan = ref(false);
 const selectedPlan = ref(null);
-
-const transactionForm = ref({
-  id: null,
-  type: 'expense',
-  amount: '',
-  date: new Date().toISOString().split('T')[0],
-  description: '',
-  planId: 'other' // Default to 'other' if no plan is selected
-});
-
-const planForm = ref({
-  id: null,
-  title: '',
-  description: '',
-  startTime: new Date().toISOString().slice(0, 16),
-  endTime: new Date().toISOString().slice(0, 16),
-  estimatedAmount: 0,
-  isCompleted: false,
-  assignees: [] // Add new field for assignees
-});
 
 const messages = ref([]);
 const newMessage = ref('');
@@ -755,6 +736,7 @@ const canEditTransaction = (transaction) => {
 };
 
 const openTransactionModal = (type, transaction = null) => {
+  console.log('openTransactionModal', type, transaction);
   if (transaction) {
     transactionForm.value = {
       id: transaction.id,
@@ -956,7 +938,7 @@ let unsubscribePlans;
 let unsubscribeMessages;
 onMounted(() => {
   fetchEventDetails();
-  // Realtime plans & messages
+  // Realtime plans & messages & readStatus
   const eventId = route.params.id;
   const eventRef = doc(db, 'events', eventId);
   if (unsubscribePlans) unsubscribePlans();
@@ -967,20 +949,37 @@ onMounted(() => {
     if (data.plans) {
       plans.value = data.plans;
     }
+    // Cập nhật messages và readStatus realtime
+    if (data.messages) {
+      messages.value = data.messages;
+      if (event.value) event.value.messages = data.messages;
+    }
+    if (data.readStatus) {
+      if (event.value) event.value.readStatus = data.readStatus;
+      else event.value = { ...(event.value || {}), readStatus: data.readStatus };
+    }
   });
   unsubscribeMessages = onSnapshot(eventRef, (docSnap) => {
     if (!docSnap.exists()) return;
     const data = docSnap.data();
     if (data.messages) {
       messages.value = data.messages;
+      if (event.value) event.value.messages = data.messages;
+    }
+    if (data.readStatus) {
+      if (event.value) event.value.readStatus = data.readStatus;
+      else event.value = { ...(event.value || {}), readStatus: data.readStatus };
     }
   });
   nextTick(() => {
     const container = messagesContainer.value;
     if (container) {
-      container.addEventListener('scroll', handleScroll);
+      container.addEventListener('scroll', handleChatScroll);
     }
   });
+  if (activeTab.value === 'discussion') {
+    unreadMessagesCount.value = 0;
+  }
 });
 onUnmounted(() => {
   if (unsubscribePlans) unsubscribePlans();
@@ -1021,6 +1020,7 @@ const isFormValid = computed(() => {
 
 // Methods for Plans
 const openPlanModal = () => {
+  console.log('openPlanModal');
   isEditingPlan.value = false;
   const now = new Date();
   planForm.value = {
@@ -1366,6 +1366,126 @@ const handleScroll = () => {
   // Nếu chưa ở cuối thì show nút
   showScrollToBottom.value = container.scrollTop + container.clientHeight < container.scrollHeight - 50;
 };
+
+// Group messages by user and time
+const groupedMessages = computed(() => {
+  if (!messages.value.length) return [];
+  const groups = [];
+  let currentGroup = null;
+  let lastDate = null;
+  messages.value.forEach((msg, idx) => {
+    const prev = messages.value[idx - 1];
+    const msgDate = new Date(msg.createdAt.seconds * 1000);
+    const msgDay = msgDate.toDateString();
+    // Nếu khác ngày, tạo group mới
+    if (!lastDate || lastDate !== msgDay) {
+      groups.push({
+        type: 'date',
+        date: msgDate
+      });
+      lastDate = msgDay;
+      currentGroup = null;
+    }
+    // Nếu khác user hoặc group chưa có, tạo group mới
+    if (!currentGroup || prev?.createdBy.uid !== msg.createdBy.uid) {
+      currentGroup = {
+        user: msg.createdBy,
+        messages: [],
+        isOwn: msg.createdBy.uid === user.value?.uid
+      };
+      groups.push(currentGroup);
+    }
+    currentGroup.messages.push(msg);
+  });
+  return groups;
+});
+
+const unreadMessagesCount = computed(() => {
+  if (!event.value || !event.value.messages || !user.value) return 0;
+  const messagesArr = event.value.messages;
+  const readStatus = event.value.readStatus || {};
+  const lastReadId = readStatus[user.value.uid];
+  if (!lastReadId) return messagesArr.length;
+  const lastReadIdx = messagesArr.findIndex(m => m.id === lastReadId);
+  if (lastReadIdx === -1) return messagesArr.length;
+  return messagesArr.length - (lastReadIdx + 1);
+});
+
+// Hàm kiểm tra đã ở cuối khung chat chưa
+function isAtBottom() {
+  const container = messagesContainer.value;
+  if (!container) return false;
+  return container.scrollTop + container.clientHeight >= container.scrollHeight - 10;
+}
+
+// Hàm cập nhật trạng thái đã đọc lên Firestore
+async function markMessagesAsRead() {
+  if (event.value && event.value.messages && event.value.messages.length > 0 && user.value) {
+    const lastMsg = event.value.messages[event.value.messages.length - 1];
+    const eventRef = doc(db, 'events', event.value.id);
+    const readStatus = event.value.readStatus || {};
+    if (readStatus[user.value.uid] !== lastMsg.id) {
+      readStatus[user.value.uid] = lastMsg.id;
+      await updateDoc(eventRef, { readStatus });
+      event.value.readStatus = { ...readStatus };
+    }
+  }
+}
+
+// Khi scroll, nếu ở cuối và đang ở tab Thảo luận thì mark as read
+function handleChatScroll() {
+  if (activeTab.value === 'discussion' && isAtBottom()) {
+    markMessagesAsRead();
+  }
+}
+
+// Gắn sự kiện scroll khi mounted và activeTab là discussion
+watch(activeTab, (newTab) => {
+  nextTick(() => {
+    const container = messagesContainer.value;
+    if (container) {
+      container.removeEventListener('scroll', handleChatScroll);
+      if (newTab === 'discussion') {
+        container.addEventListener('scroll', handleChatScroll);
+        // Nếu vừa vào tab và đã ở cuối thì mark as read luôn
+        // Thêm scroll xuống cuối khi chuyển tab
+        container.scrollTop = container.scrollHeight;
+        if (isAtBottom()) {
+          markMessagesAsRead();
+        }
+      }
+    }
+  });
+});
+
+// Khi có tin nhắn mới, nếu đang ở tab Thảo luận và đã ở cuối thì mark as read
+watch(() => event.value && event.value.messages && event.value.messages.length, () => {
+  if (activeTab.value === 'discussion' && isAtBottom()) {
+    markMessagesAsRead();
+  }
+});
+
+// Di chuyển khai báo này lên trên
+const transactionForm = ref({
+  id: null,
+  type: 'expense',
+  amount: '',
+  date: new Date().toISOString().split('T')[0],
+  description: '',
+  planId: 'other' // Default to 'other' if no plan is selected
+});
+
+// Đảm bảo khai báo planForm ở đây
+const planForm = ref({
+  id: null,
+  title: '',
+  description: '',
+  startTime: new Date().toISOString().slice(0, 16),
+  endTime: new Date().toISOString().slice(0, 16),
+  estimatedAmount: 0,
+  isCompleted: false,
+  assignees: []
+});
 </script>
 
 <style scoped>
@@ -2992,5 +3112,272 @@ textarea.form-input {
     margin-top: 10px;
     width: 100vw;
   }
+}
+
+.chat-date-separator {
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+  margin: 18px 0 10px 0;
+  font-style: italic;
+}
+
+.chat-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.own-group {
+  align-items: flex-end;
+}
+
+.chat-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.chat-bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.chat-bubble {
+  display: inline-block;
+  max-width: 70vw;
+  background: #fff;
+  color: #222;
+  padding: 8px 14px;
+  border-radius: 18px;
+  margin-bottom: 0;
+  font-size: 15px;
+  position: relative;
+  word-break: break-word;
+  margin-left: 36px;
+}
+
+.own-bubble {
+  background: #1877f2;
+  color: #fff;
+  align-self: flex-end;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.chat-bubble.first {
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+}
+.chat-bubble.last {
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
+  margin-bottom: 4px;
+}
+.own-group .chat-bubble {
+  margin-left: 0;
+  margin-right: 0;
+  align-self: flex-end;
+}
+
+.bubble-content {
+  display: block;
+}
+.bubble-time {
+  display: block;
+  color: #888;
+  font-size: 12px;
+  margin-top: 2px;
+  text-align: right;
+}
+
+@media (max-width: 390px) {
+  .event-detail-page {
+    padding: 8px;
+  }
+
+  .page-header {
+    padding: 12px;
+    margin-bottom: 15px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .event-title {
+    font-size: 18px;
+    width: 100%;
+  }
+
+  .event-status {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .tabs {
+    overflow-x: auto;
+    padding-bottom: 5px;
+    margin: 0 -8px;
+    padding: 0 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .discussion-section {
+    padding: 8px;
+    height: calc(100vh - 200px);
+  }
+
+  .discussion-content {
+    height: calc(100% - 60px);
+    margin-top: 10px;
+  }
+
+  .messages-container {
+    padding: 8px;
+    max-height: calc(100% - 50px);
+  }
+
+  .message-input {
+    padding: 8px;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    z-index: 1;
+  }
+
+  .message-textarea {
+    padding: 8px;
+    font-size: 13px;
+    min-height: 36px;
+  }
+
+  .send-button {
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .chat-bubble {
+    max-width: 85%;
+    padding: 6px 12px;
+    font-size: 14px;
+    margin-left: 30px;
+  }
+
+  .own-bubble {
+    margin-right: 0;
+  }
+
+  .bubble-time {
+    font-size: 11px;
+  }
+
+  .info-section {
+    padding: 8px;
+    margin-top: 10px;
+  }
+
+  .info-card, .participants-section {
+    padding: 12px;
+  }
+
+  .info-grid {
+    gap: 12px;
+  }
+
+  .info-label {
+    font-size: 12px;
+  }
+
+  .info-value {
+    font-size: 14px;
+  }
+
+  .participants-list {
+    gap: 10px;
+  }
+
+  .participant-card {
+    padding: 8px;
+  }
+
+  .participant-name {
+    font-size: 13px;
+  }
+
+  .participant-email {
+    font-size: 11px;
+  }
+
+  .modal-content {
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .modal-header {
+    padding: 12px 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  .form-group {
+    margin-bottom: 10px;
+  }
+
+  .form-input {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .modal-actions {
+    padding: 12px 16px;
+  }
+
+  .modal-actions button {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+
+  .scroll-to-bottom-btn {
+    right: 8px;
+    bottom: 8px;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .chat-date-separator {
+    font-size: 12px;
+    margin: 12px 0 8px 0;
+  }
+}
+
+.badge-unread {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #2196f3;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(33,150,243,0.15);
+  z-index: 2;
+  border: 2px solid #fff;
 }
 </style> 

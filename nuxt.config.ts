@@ -8,7 +8,7 @@ export default defineNuxtConfig({
     registerType: 'autoUpdate',
     manifest: {
       name: 'Manager Money',
-      short_name: 'SamTV',
+      short_name: 'Quản lý chi tiêu',
       description: 'Ứng dụng quản lý chi tiêu cá nhân',
       lang: 'vi',
       display: 'standalone',
