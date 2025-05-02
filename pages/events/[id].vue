@@ -773,17 +773,14 @@ const closeTransactionModal = () => {
 
 const handleSubmitTransaction = async () => {
   if (!event.value || !user.value) return;
-  
   isSubmitting.value = true;
   try {
     const eventRef = doc(db, 'events', event.value.id);
-    
     // Initialize transactions array if not exists
     if (!event.value.transactions) {
       event.value.transactions = [];
       await updateDoc(eventRef, { transactions: [] });
     }
-
     const transactionData = {
       id: transactionForm.value.id || Date.now().toString(),
       type: transactionForm.value.type,
@@ -798,9 +795,7 @@ const handleSubmitTransaction = async () => {
         displayName: user.value.displayName || user.value.email
       }
     };
-
     let updatedTransactions = [...event.value.transactions];
-    
     if (transactionForm.value.id) {
       // Update existing transaction
       const index = updatedTransactions.findIndex(t => t.id === transactionForm.value.id);
@@ -811,28 +806,20 @@ const handleSubmitTransaction = async () => {
       // Add new transaction
       updatedTransactions.push(transactionData);
     }
-
     // Calculate new totals
     const totalIncome = updatedTransactions
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
-    
     const totalExpense = updatedTransactions
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
-
     // Update Firestore in one batch
     await updateDoc(eventRef, {
       transactions: updatedTransactions,
       totalIncome,
       totalExpense
     });
-
-    // Update local state
-    event.value.transactions = updatedTransactions;
-    event.value.totalIncome = totalIncome;
-    event.value.totalExpense = totalExpense;
-
+    // KHÔNG gán event.value.transactions ở đây, chỉ close modal
     closeTransactionModal();
   } catch (error) {
     console.error('Error handling transaction:', error);
@@ -853,29 +840,14 @@ const confirmDeleteTransaction = (transaction) => {
 
 const handleDeleteTransaction = async () => {
   if (!selectedTransaction.value || !event.value) return;
-  
   isSubmitting.value = true;
   try {
     const eventRef = doc(db, 'events', event.value.id);
-    
     // Remove transaction
     await updateDoc(eventRef, {
       transactions: arrayRemove(selectedTransaction.value)
     });
-
-    // Update local state
-    const index = event.value.transactions.findIndex(t => t.id === selectedTransaction.value.id);
-    event.value.transactions.splice(index, 1);
-
-    // Update totals
-    if (selectedTransaction.value.type === 'income') {
-      event.value.totalIncome -= selectedTransaction.value.amount;
-      await updateDoc(eventRef, { totalIncome: event.value.totalIncome });
-    } else {
-      event.value.totalExpense -= selectedTransaction.value.amount;
-      await updateDoc(eventRef, { totalExpense: event.value.totalExpense });
-    }
-
+    // KHÔNG gán event.value.transactions ở đây, chỉ close modal
     showDeleteModal.value = false;
     selectedTransaction.value = null;
   } catch (error) {
@@ -938,7 +910,7 @@ let unsubscribePlans;
 let unsubscribeMessages;
 onMounted(() => {
   fetchEventDetails();
-  // Realtime plans & messages & readStatus
+  // Realtime plans & messages & transactions & readStatus
   const eventId = route.params.id;
   const eventRef = doc(db, 'events', eventId);
   if (unsubscribePlans) unsubscribePlans();
@@ -948,6 +920,10 @@ onMounted(() => {
     const data = docSnap.data();
     if (data.plans) {
       plans.value = data.plans;
+      if (event.value) event.value.plans = data.plans;
+    }
+    if (data.transactions) {
+      if (event.value) event.value.transactions = data.transactions;
     }
     // Cập nhật messages và readStatus realtime
     if (data.messages) {
