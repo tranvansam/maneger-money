@@ -19,6 +19,20 @@
               />
             </div>
           </div>
+          <div class="tag-filter-bar-inline">
+            <label for="tagFilter" class="tag-filter-label">Tag:</label>
+            <select id="tagFilter" v-model="filterTag" class="tag-filter-select">
+              <option v-for="tag in tagOptions" :key="tag" :value="tag">{{ tag }}</option>
+            </select>
+          </div>
+          <div class="status-filter-bar-inline">
+            <label for="statusFilter" class="status-filter-label">Trạng thái:</label>
+            <select id="statusFilter" v-model="filterStatus" class="status-filter-select">
+              <option value="Còn hoạt động">Còn hoạt động</option>
+              <option value="Kết thúc">Kết thúc</option>
+              <option value="Tất cả">Tất cả</option>
+            </select>
+          </div>
           <div v-if="friends.length > 0">
             <button @click="showAddEventModal = true" class="add-button">
               <i class="fas fa-plus"></i>
@@ -58,6 +72,9 @@
         <div v-for="event in filteredEvents" 
              :key="event.id" 
              class="event-card" @click="navigateToDetail(event.id)">
+          <div class="event-status-label-top" :class="getEventStatusClass(event)">
+            {{ getEventStatus(event) }}
+          </div>
           <div class="event-header">
             <div class="event-creator">
               <Avatar 
@@ -74,9 +91,6 @@
                 </div>
               </div>
             </div>
-            <span class="event-status" :class="{ 'active': !event.isEnded, 'ended': event.isEnded }">
-              {{ event.isEnded ? 'Đã kết thúc' : 'Đang diễn ra' }}
-            </span>
           </div>
   
           <p class="event-description">{{ event.description || 'Không có mô tả' }}</p>
@@ -109,12 +123,16 @@
                 </div>
               </div>
               <span class="info-label">{{ event.participants?.length || 0 }} người tham gia</span>
+              <div class="event-tag-under" :class="['tag-' + (event.tag || 'Chưa xác định').replace(/\s/g, '').toLowerCase()]">
+                {{ event.tag || 'Chưa xác định' }}
+              </div>
             </div>
             <div class="total-amount">
               <span class="info-label">Tổng chi tiêu:</span>
               <span class="info-value">{{ formatCurrency(event.totalAmount || 0) }}</span>
             </div>
           </div>
+          <span v-if="hasUnreadNotification(event)" class="event-badge"></span>
         </div>
       </div>
   
@@ -145,6 +163,16 @@
             <div class="form-group">
               <label>Địa điểm</label>
               <input v-model="newEvent.location" type="text" class="form-input" placeholder="Nhập địa điểm">
+            </div>
+            <div class="form-group">
+              <label>Tag</label>
+              <select v-model="newEvent.tag" class="form-input tag-select">
+                <option value="Khác">Khác</option>
+                <option value="Gia đình">Gia đình</option>
+                <option value="Người yêu">Người yêu</option>
+                <option value="Bạn bè">Bạn bè</option>
+                <option value="Du lịch">Du lịch</option>
+              </select>
             </div>
             <div class="form-group">
               <label>Mời bạn bè <span class="required">*</span></label>
@@ -216,7 +244,7 @@
   
   <script setup>
   import { ref, onMounted, computed } from 'vue';
-  import { collection, addDoc, query, getDocs, where, serverTimestamp } from 'firebase/firestore';
+  import { collection, addDoc, query, getDocs, where, serverTimestamp, onSnapshot, updateDoc, doc } from 'firebase/firestore';
   import { db } from '~/plugins/firebase';
   import { useAuth } from '~/composables/useAuth';
   import { useFriends } from '~/composables/useFriends';
@@ -237,6 +265,8 @@
   const selectedFriends = ref([]);
   const searchQuery = ref('');
   const friendSearchQuery = ref('');
+  const eventNotifications = ref({});
+  let unsubscribeEvents = null;
   
   // Add formatDate function
   const formatDate = (date) => {
@@ -262,7 +292,8 @@
     endDate: null,
     participants: [],
     totalAmount: 0,
-    isEnded: false
+    isEnded: false,
+    tag: 'Khác'
   });
   
   // Format tiền tệ
@@ -332,9 +363,11 @@
         startDate: newEvent.value.startDate ? new Date(newEvent.value.startDate) : null,
         endDate: newEvent.value.endDate ? new Date(newEvent.value.endDate) : null,
         participants: [creatorData, ...selectedFriendsData],
+        participantsUid: [creatorData.uid, ...selectedFriendsData.map(f => f.uid)],
         createdBy: creatorData,
         totalAmount: 0,
         isEnded: false,
+        tag: newEvent.value.tag,
         createdAt: serverTimestamp()
       };
 
@@ -344,45 +377,38 @@
       // Reset form and close modal
       resetForm();
       showAddEventModal.value = false;
-
-      // Refresh events list
-      await fetchEvents();
     } catch (error) {
       console.error('Error creating event:', error);
       alert('Có lỗi xảy ra khi tạo sự kiện. Vui lòng thử lại.');
     }
   };
   
-  // Update fetchEvents function
-  const fetchEvents = async () => {
+  // Lắng nghe realtime danh sách sự kiện
+  const listenEventsRealtime = () => {
     if (!user.value) return;
-
-    loading.value = true;
-    try {
-      const eventsRef = collection(db, 'events');
-      const q = query(
-        eventsRef,
-        where('participants', 'array-contains', {
-          uid: user.value.uid,
-          email: user.value.email,
-          displayName: user.value.displayName || user.value.email,
-          photoURL: user.value.photoURL
-        })
-      );
-      
-      const querySnapshot = await getDocs(q);
-      events.value = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-        startDate: doc.data().startDate?.toDate(),
-        endDate: doc.data().endDate?.toDate()
-      }));
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    } finally {
+    if (unsubscribeEvents) unsubscribeEvents();
+    const eventsRef = collection(db, 'events');
+    const q = query(eventsRef, where('participantsUid', 'array-contains', user.value.uid));
+    unsubscribeEvents = onSnapshot(q, (querySnapshot) => {
+      const newEvents = [];
+      querySnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        newEvents.push({
+          id: docSnap.id,
+          ...data,
+          createdAt: data.createdAt?.toDate(),
+          startDate: data.startDate?.toDate(),
+          endDate: data.endDate?.toDate()
+        });
+        // Lưu notification trạng thái lastUpdated
+        if (data.lastUpdated) {
+          if (!eventNotifications.value[docSnap.id]) eventNotifications.value[docSnap.id] = {};
+          eventNotifications.value[docSnap.id].lastUpdated = data.lastUpdated;
+        }
+      });
+      events.value = newEvents;
       loading.value = false;
-    }
+    });
   };
   
   // Add this function to handle navigation
@@ -430,7 +456,8 @@
       endDate: null,
       participants: [],
       totalAmount: 0,
-      isEnded: false
+      isEnded: false,
+      tag: 'Khác'
     };
     selectedFriends.value = [];
     participantEmail.value = '';
@@ -442,10 +469,24 @@
   
   // Add computed for filtered events
   const filteredEvents = computed(() => {
-    if (!searchQuery.value) return events.value;
-    
+    let filtered = events.value;
+    // Lọc theo tag
+    if (filterTag.value !== 'Tất cả') {
+      filtered = filtered.filter(event => event.tag === filterTag.value);
+    }
+    // Lọc theo trạng thái
+    if (filterStatus.value === 'Còn hoạt động') {
+      filtered = filtered.filter(event => {
+        const status = getEventStatus(event);
+        return status === 'Chưa xác định' || status === 'Sắp đến' || status === 'Đang diễn ra' || status === 'Chờ thanh toán';
+      });
+    } else if (filterStatus.value === 'Kết thúc') {
+      filtered = filtered.filter(event => getEventStatus(event) === 'Đã kết thúc');
+    }
+    // Lọc theo search
+    if (!searchQuery.value) return filtered;
     const query = searchQuery.value.toLowerCase().trim();
-    return events.value.filter(event => {
+    return filtered.filter(event => {
       return event.name.toLowerCase().includes(query) ||
              event.description.toLowerCase().includes(query) ||
              event.location.toLowerCase().includes(query);
@@ -485,16 +526,60 @@
       endDate: null,
       participants: [],
       totalAmount: 0,
-      isEnded: false
+      isEnded: false,
+      tag: 'Khác'
     };
     selectedFriends.value = [];
     friendSearchQuery.value = '';
   };
   
-  onMounted(async () => {
-    if (user.value) {
-      await Promise.all([fetchEvents(), fetchFriends()]);
+  // Khi user click vào event, đánh dấu đã đọc notification
+  const markEventAsRead = async (eventId) => {
+    if (!user.value) return;
+    const notif = eventNotifications.value[eventId] || {};
+    notif.lastRead = Date.now();
+    eventNotifications.value[eventId] = notif;
+    // Có thể lưu trạng thái đã đọc lên Firestore nếu muốn đồng bộ đa thiết bị
+  };
+  
+  // Hiển thị badge nếu cập nhật mới mà user chưa đọc
+  const hasUnreadNotification = (event) => {
+    const notif = eventNotifications.value[event.id];
+    if (!notif || !notif.lastUpdated) return false;
+    if (!notif.lastRead) return true;
+    return notif.lastRead < notif.lastUpdated;
+  };
+  
+  // Thêm filterTag:
+  const filterTag = ref('Tất cả');
+  const tagOptions = ['Tất cả', 'Khác', 'Gia đình', 'Người yêu', 'Bạn bè', 'Du lịch'];
+  
+  // Thêm filterStatus:
+  const filterStatus = ref('Còn hoạt động');
+  const statusOptions = ['Còn hoạt động', 'Kết thúc', 'Tất cả'];
+  
+  // Hàm tính trạng thái sự kiện
+  const getEventStatus = (event) => {
+    const now = new Date();
+    if (event.isEnded) return 'Đã kết thúc';
+    if (event.startDate && event.endDate) {
+      if (now < event.startDate) return 'Sắp đến';
+      if (now >= event.startDate && now <= event.endDate) return 'Đang diễn ra';
+      if (now > event.endDate) return 'Đã kết thúc';
     }
+    return 'Chưa xác định';
+  };
+  const getEventStatusClass = (event) => {
+    const status = getEventStatus(event);
+    if (status === 'Sắp đến') return 'status-upcoming';
+    if (status === 'Đang diễn ra') return 'status-active';
+    if (status === 'Đã kết thúc') return 'status-ended';
+    return '';
+  };
+  
+  onMounted(async () => {
+    await fetchFriends();
+    listenEventsRealtime();
   });
   </script>
   
@@ -608,6 +693,7 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     cursor: pointer;
     transition: all 0.2s ease;
+    position: relative;
   }
   
   .event-card:hover {
@@ -978,6 +1064,7 @@
   .creator-info {
     display: flex;
     flex-direction: column;
+    gap: 2px;
   }
   
   .creator-name {
@@ -1106,6 +1193,168 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  .event-badge {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background: #f44336;
+    border-radius: 50%;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  .tag-filter-bar-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 12px;
+  }
+  .tag-filter-label {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+  }
+  .tag-filter-select {
+    padding: 8px 36px 8px 16px;
+    border-radius: 16px;
+    border: 1.5px solid #4CAF50;
+    background: #f8f9fa url('data:image/svg+xml;utf8,<svg fill="%234CAF50" height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat right 12px center/18px 18px;
+    color: #333;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 8px rgba(76,175,80,0.04);
+    appearance: none;
+    cursor: pointer;
+  }
+  .tag-filter-select:focus {
+    border-color: #388e3c;
+    box-shadow: 0 0 0 2px rgba(76,175,80,0.12);
+  }
+  .tag-filter-select:hover {
+    border-color: #388e3c;
+    background-color: #f1f8e9;
+  }
+  .tag-select {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid #4CAF50;
+    background: #f8f9fa;
+    color: #333;
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.2s;
+    margin-top: 4px;
+  }
+  .tag-select:focus {
+    border-color: #388e3c;
+  }
+  .event-tag-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    margin-bottom: 0;
+    position: static;
+  }
+  .event-tag {
+    background: #e0f2f1;
+    color: #00796b;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 14px;
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    pointer-events: none;
+  }
+  .event-status-label {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 14px;
+    border-radius: 16px;
+    pointer-events: none;
+  }
+  .status-upcoming {
+    background: #fffde7;
+    color: #fbc02d;
+    border: 1px solid #ffe082;
+  }
+  .status-active {
+    background: #e8f5e9;
+    color: #388e3c;
+    border: 1px solid #a5d6a7;
+  }
+  .status-ended {
+    background: #ffebee;
+    color: #c62828;
+    border: 1px solid #ef9a9a;
+  }
+  .event-card {
+    position: relative;
+  }
+  .event-status-label-top {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 14px;
+    border-radius: 16px;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .event-tag-under {
+    display: inline-block;
+    margin-top: 8px;
+    background: #e0f2f1;
+    color: #00796b;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 12px;
+    border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    pointer-events: none;
+  }
+  .status-filter-bar-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 12px;
+  }
+  .status-filter-label {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+  }
+  .status-filter-select {
+    padding: 8px 36px 8px 16px;
+    border-radius: 16px;
+    border: 1.5px solid #4CAF50;
+    background: #f8f9fa url('data:image/svg+xml;utf8,<svg fill="%234CAF50" height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat right 12px center/18px 18px;
+    color: #333;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 8px rgba(76,175,80,0.04);
+    appearance: none;
+    cursor: pointer;
+  }
+  .status-filter-select:focus {
+    border-color: #388e3c;
+    box-shadow: 0 0 0 2px rgba(76,175,80,0.12);
+  }
+  .status-filter-select:hover {
+    border-color: #388e3c;
+    background-color: #f1f8e9;
+  }
+  @media (max-width: 768px) {
+    .tag-filter-bar-inline,
+    .status-filter-bar-inline {
+      margin-left: 0;
+      margin-top: 8px;
     }
   }
   </style> 

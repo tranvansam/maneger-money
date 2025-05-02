@@ -13,8 +13,8 @@
           Quay lại
         </button>
         <h1 class="event-title">{{ event.name }}</h1>
-        <div class="event-status" :class="{ 'active': !event.isEnded, 'ended': event.isEnded }">
-          {{ event.isEnded ? 'Đã kết thúc' : 'Đang diễn ra' }}
+        <div class="event-status-label-top" :class="getEventStatusClass(event)">
+          {{ getEventStatus(event) }}
         </div>
       </div>
 
@@ -1462,6 +1462,25 @@ const planForm = ref({
   isCompleted: false,
   assignees: []
 });
+
+// Thêm hàm đồng bộ trạng thái
+const getEventStatus = (event) => {
+  const now = new Date();
+  if (event.isEnded) return 'Đã kết thúc';
+  if (event.startDate && event.endDate) {
+    if (now < new Date(event.startDate.seconds ? event.startDate.seconds * 1000 : event.startDate)) return 'Sắp đến';
+    if (now >= new Date(event.startDate.seconds ? event.startDate.seconds * 1000 : event.startDate) && now <= new Date(event.endDate.seconds ? event.endDate.seconds * 1000 : event.endDate)) return 'Đang diễn ra';
+    if (now > new Date(event.endDate.seconds ? event.endDate.seconds * 1000 : event.endDate)) return 'Đã kết thúc';
+  }
+  return 'Chưa xác định';
+};
+const getEventStatusClass = (event) => {
+  const status = getEventStatus(event);
+  if (status === 'Sắp đến') return 'status-upcoming';
+  if (status === 'Đang diễn ra') return 'status-active';
+  if (status === 'Đã kết thúc') return 'status-ended';
+  return '';
+};
 </script>
 
 <style scoped>
@@ -1504,6 +1523,7 @@ const planForm = ref({
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  position: relative;
 }
 
 .back-button {
@@ -1536,21 +1556,31 @@ const planForm = ref({
   flex: 1;
 }
 
-.event-status {
+.event-status-label-top {
+  position: absolute;
+  top: 20px;
+  right: 30px;
   font-size: 14px;
-  padding: 6px 12px;
-  border-radius: 20px;
   font-weight: 500;
+  padding: 6px 18px;
+  border-radius: 18px;
+  pointer-events: none;
+  z-index: 2;
 }
-
-.event-status.active {
-  background-color: #e8f5e9;
-  color: #2E7D32;
+.status-upcoming {
+  background: #fffde7;
+  color: #fbc02d;
+  border: 1px solid #ffe082;
 }
-
-.event-status.ended {
-  background-color: #ffebee;
+.status-active {
+  background: #e8f5e9;
+  color: #388e3c;
+  border: 1px solid #a5d6a7;
+}
+.status-ended {
+  background: #ffebee;
   color: #c62828;
+  border: 1px solid #ef9a9a;
 }
 
 .info-section {
