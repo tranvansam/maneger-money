@@ -46,7 +46,7 @@ export default defineNuxtConfig({
             'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no'
         },
         {
-          name: 'apple-mobile-web-app-capable',
+          name: 'mobile-web-app-capable',
           content: 'yes'
         },
         {
@@ -64,6 +64,12 @@ export default defineNuxtConfig({
           rel: 'apple-touch-startup-image',
           href: '/splash-1125x2436.png',
           media: '(device-width: 375px) and (device-height: 812px)'
+        },
+        {
+          rel: 'stylesheet',
+          href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+          integrity: 'sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==',
+          crossorigin: 'anonymous'
         }
       ]
     }

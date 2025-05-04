@@ -16,36 +16,23 @@
         <div class="event-status-label-top" :class="getEventStatusClass(event)">
           {{ getEventStatus(event) }}
         </div>
+        <button v-if="getEventStatus(event) !== 'Đã kết thúc' && user?.uid === event.createdBy?.uid" class="end-event-btn" @click="showEndEventModal = true">Kết thúc sự kiện</button>
+        <button v-if="getEventStatus(event) !== 'Đã kết thúc'" class="pay-btn" @click="openPaymentModal">Thanh toán tất cả</button>
       </div>
 
       <!-- Tabs Section -->
       <div class="tabs-section">
         <div class="tabs">
           <button 
-            @click="activeTab = 'transactions'"
-            :class="['tab-btn', { active: activeTab === 'transactions' }]"
-          >
-            Thu chi
-          </button>
-          <button 
-            @click="activeTab = 'plans'"
-            :class="['tab-btn', { active: activeTab === 'plans' }]"
-          >
-            Kế hoạch
-          </button>
-          <button 
-            @click="activeTab = 'statistics'"
-            :class="['tab-btn', { active: activeTab === 'statistics' }]"
-          >
-            Thống kê
-          </button>
-          <button 
-            @click="activeTab = 'discussion'"
-            :class="['tab-btn', { active: activeTab === 'discussion' }]"
+            v-for="tab in allTabs" 
+            :key="tab.key"
+            @click="activeTab = tab.key"
+            :class="['tab-btn', { active: activeTab === tab.key }]"
             style="position: relative;"
           >
-            Thảo luận
-            <span v-if="unreadMessagesCount > 0" class="badge-unread">{{ unreadMessagesCount }}</span>
+            {{ tab.label }}
+            <span v-if="tab.key === 'discussion' && unreadMessagesCount > 0" class="notification-dot"></span>
+            <span v-if="tab.key === 'paymentHistory' && totalPendingPayments > 0" class="notification-dot"></span>
           </button>
         </div>
       </div>
@@ -122,8 +109,19 @@
                   </span>
                 </div>
               </div>
-              
-              <div v-if="canEditTransaction(transaction)" class="transaction-actions">
+              <div v-if="transaction.type === 'expense'">
+                <template v-if="transaction.paymentSplits && transaction.paymentSplits.length">
+                  <span class="split-status">Đã chia tiền</span>
+                </template>
+                <template v-else>
+                  <div class="transaction-actions">
+                    <button class="action-btn pay-btn" @click="openPaymentModalForTransaction(transaction)">
+                      Thanh toán
+                    </button>
+                  </div>
+                </template>
+              </div>
+              <div v-if="canEditTransaction(transaction) && !(transaction.paymentSplits && transaction.paymentSplits.length)" class="transaction-actions">
                 <button 
                   @click="editTransaction(transaction)"
                   class="action-icon edit"
@@ -354,6 +352,96 @@
               Gửi
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Payment History Section -->
+      <div v-if="activeTab === 'paymentHistory'" class="payment-history-section">
+        <div class="section-header">
+          <h2>Lịch sử thanh toán</h2>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <button :class="['tab-btn', { active: paymentTab === 'toPay' }]" @click="paymentTab = 'toPay'">
+            Tôi cần trả
+            <span v-if="pendingPaymentsToPay > 0" class="badge-counter">{{ pendingPaymentsToPay }}</span>
+          </button>
+          <button :class="['tab-btn', { active: paymentTab === 'toReceive' }]" @click="paymentTab = 'toReceive'">
+            Tôi nhận
+            <span v-if="pendingPaymentsToReceive > 0" class="badge-counter">{{ pendingPaymentsToReceive }}</span>
+          </button>
+        </div>
+        
+        <!-- Thông báo -->
+        <div v-if="notification.show" :class="['notification', notification.type]">
+          {{ notification.message }}
+        </div>
+        
+        <div class="payment-history-list">
+          <!-- Tôi cần trả -->
+          <template v-if="paymentTab === 'toPay'">
+            <div v-for="split in splitsToPay" :key="split.uid + '-' + split.payTo" class="payment-history-row">
+              <div class="payment-info">
+                <!-- Trả cho -->
+                <span class="pay-to">Trả cho: <b @click="navigateToProfile(split.payTo)" class="pay-to-link">{{ getParticipantName(split.payTo) }}</b></span>
+                <!-- Nội dung khoản cần trả -->
+                <span v-if="split.transactionId" class="transaction-description">
+                  {{ getTransactionDescription(split.transactionId) }}
+                </span>
+                <span v-else class="transaction-description">
+                  Thanh toán tổng sự kiện
+                </span>
+                <!-- Số tiền -->
+                <span class="amount">{{ formatCurrency(split.amount) }}</span>
+              </div>
+              <div class="payment-status">
+                <span class="status" :class="split.status">
+                  {{ split.status === 'paid' ? (split.confirmedByReceiver ? 'Đã trả' : 'Đã gửi yêu cầu') : 'Chưa thanh toán' }}
+                </span>
+                <template v-if="split.status !== 'paid'">
+                  <button class="check-btn" :disabled="splitLoading[`${split.uid}-${split.payTo}`]" @click="sendPaidRequest(split)">
+                    {{ splitLoading[`${split.uid}-${split.payTo}`] ? 'Đang gửi...' : 'Gửi yêu cầu đã trả' }}
+                  </button>
+                </template>
+                <template v-else>
+                  <span v-if="split.confirmedByReceiver" style="color: #388e3c; font-weight: 500;">Đã hoàn thành</span>
+                  <span v-else style="color: #f57f17; font-weight: 500;">Đang chờ xác nhận</span>
+                </template>
+              </div>
+            </div>
+            <div v-if="splitsToPay.length === 0" style="color: #888; padding: 12px;">Không có khoản nào bạn cần trả.</div>
+          </template>
+          <!-- Tôi nhận -->
+          <template v-else>
+            <div v-for="split in splitsToReceive" :key="split.uid + '-' + split.payTo" class="payment-history-row payment-receive-row">
+              <div class="payment-info">
+                <div class="payer-name">
+                  <span class="payer-label">Người trả:</span> <span class="payer-link" @click.stop="navigateToProfile(split.uid)">{{ getParticipantName(split.uid) }}</span>
+                </div>
+                <div class="receive-description">
+                  <span v-if="split.transactionId">{{ getTransactionDescription(split.transactionId) }}</span>
+                  <span v-else>Thanh toán tổng sự kiện</span>
+                </div>
+                <div class="receive-amount">{{ formatCurrency(split.amount) }}</div>
+              </div>
+              <div class="payment-status">
+                <span class="status" :class="split.status">
+                  {{ split.status === 'paid' ? (split.confirmedByReceiver ? 'Đã nhận' : 'Chờ xác nhận') : 'Chưa thanh toán' }}
+                </span>
+                <template v-if="split.status === 'paid'">
+                  <button v-if="!split.confirmedByReceiver" 
+                          class="check-btn" 
+                          :disabled="splitLoading[`${split.uid}-${split.payTo}`]" 
+                          @click="confirmReceived(split)">
+                    {{ splitLoading[`${split.uid}-${split.payTo}`] ? 'Đang xác nhận...' : 'Xác nhận đã nhận tiền' }}
+                  </button>
+                  <span v-else class="confirmed-badge">
+                    <i class="fas fa-check-circle"></i> Đã xác nhận
+                  </span>
+                </template>
+              </div>
+            </div>
+            <div v-if="splitsToReceive.length === 0" style="color: #888; padding: 12px;">Không có khoản nào bạn nhận.</div>
+          </template>
         </div>
       </div>
 
@@ -631,6 +719,12 @@
               <span class="info-label">Tổng chi tiêu</span>
               <span class="info-value">{{ formatCurrency(event.totalAmount) }}</span>
             </div>
+            <div class="info-item">
+              <span class="info-label">Tag</span>
+              <span class="info-value tag-value">
+                {{ event.tag ? '#' + event.tag : 'Chưa xác định' }}
+              </span>
+            </div>
           </div>
           <div class="description-box">
             <h3>Mô tả</h3>
@@ -660,7 +754,55 @@
           </div>
         </div>
       </div>
+      <div v-if="showEndEventModal" class="modal-overlay" @click.self="showEndEventModal = false">
+        <div class="modal-content delete-modal">
+          <div class="modal-header">
+            <h3>Xác nhận kết thúc sự kiện</h3>
+            <button class="close-btn" @click="showEndEventModal = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p>Bạn có chắc chắn muốn kết thúc sự kiện này? Sau khi kết thúc, mọi người sẽ không thể thêm giao dịch mới.</p>
+            <p class="delete-info">{{ event.name }}</p>
+          </div>
+          <div class="modal-actions">
+            <button @click="showEndEventModal = false" class="cancel-btn">Hủy</button>
+            <button @click="endEvent" class="delete-btn" :disabled="isEndingEvent">{{ isEndingEvent ? 'Đang xử lý...' : 'Kết thúc sự kiện' }}</button>
+          </div>
+        </div>
+      </div>
     </div> <!-- Kết thúc các tab nội dung -->
+    <!-- Modal chia tiền -->
+    <div v-if="showPaymentModal" class="modal-overlay" @click.self="closePaymentModal">
+      <div class="modal-content payment-modal">
+        <div class="modal-header">
+          <h3>{{ paymentForTransaction ? `Chia tiền: ${paymentForTransaction.description}` : 'Chia tiền thanh toán tổng' }}</h3>
+          <button class="close-btn" @click="closePaymentModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="payment-list">
+            <div v-for="(member, idx) in event.participants" :key="member.uid" class="payment-row">
+              <span class="member-name">{{ member.displayName || member.email }}</span>
+              <input type="number" min="0" class="payment-input" v-model.number="paymentSplits[idx].amount" @input="handleCustomAmount(idx)" />
+              <span class="currency">₫</span>
+              <label class="pay-for-label">Trả cho:</label>
+              <select v-model="paymentSplits[idx].payTo" class="pay-for-select">
+                <option v-for="p in event.participants" :key="p.uid" :value="p.uid">{{ p.displayName || p.email }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="payment-summary">
+            <span>Tổng cần chia: <b>{{ formatCurrency(totalAmountToSplit) }}</b></span>
+            <span>Tổng đã nhập: <b>{{ formatCurrency(totalCustomAmount) }}</b></span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-button" @click="closePaymentModal">Hủy</button>
+          <button class="submit-button" :disabled="!isPaymentValid" @click="handleConfirmPaymentSplits">
+            Xác nhận chia tiền
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -688,7 +830,7 @@ const showDeleteModal = ref(false);
 const isSubmitting = ref(false);
 const currentFilter = ref('all');
 const selectedTransaction = ref(null);
-const activeTab = ref('transactions');
+const activeTab = ref(route.query.tab || 'transactions');
 const showPlanModal = ref(false);
 const showDeletePlanModal = ref(false);
 const isEditingPlan = ref(false);
@@ -908,6 +1050,7 @@ const navigateToProfile = (uid) => {
 
 let unsubscribePlans;
 let unsubscribeMessages;
+let unsubscribePayments;
 onMounted(() => {
   fetchEventDetails();
   // Realtime plans & messages & transactions & readStatus
@@ -915,6 +1058,8 @@ onMounted(() => {
   const eventRef = doc(db, 'events', eventId);
   if (unsubscribePlans) unsubscribePlans();
   if (unsubscribeMessages) unsubscribeMessages();
+  if (unsubscribePayments) unsubscribePayments();
+  
   unsubscribePlans = onSnapshot(eventRef, (docSnap) => {
     if (!docSnap.exists()) return;
     const data = docSnap.data();
@@ -935,6 +1080,7 @@ onMounted(() => {
       else event.value = { ...(event.value || {}), readStatus: data.readStatus };
     }
   });
+  
   unsubscribeMessages = onSnapshot(eventRef, (docSnap) => {
     if (!docSnap.exists()) return;
     const data = docSnap.data();
@@ -947,6 +1093,32 @@ onMounted(() => {
       else event.value = { ...(event.value || {}), readStatus: data.readStatus };
     }
   });
+  
+  // Thêm listener riêng biệt cho paymentSplits để cập nhật realtime
+  unsubscribePayments = onSnapshot(eventRef, (docSnap) => {
+    if (!docSnap.exists()) return;
+    const data = docSnap.data();
+    if (data.paymentSplits) {
+      if (event.value) {
+        event.value.paymentSplits = data.paymentSplits;
+        // Nếu có xác nhận mới từ người nhận và người hiện tại là người trả
+        if (user.value) {
+          const mySentPayments = data.paymentSplits.splits.filter(
+            split => split.uid === user.value.uid && split.status === 'paid'
+          );
+          
+          for (const split of mySentPayments) {
+            if (split.confirmedByReceiver && !isAlreadyNotified(split)) {
+              // Hiển thị thông báo khi có người xác nhận đã nhận tiền
+              saveNotifiedState(split);
+              showNotification(`${getParticipantName(split.payTo)} đã xác nhận nhận tiền!`, 'success');
+            }
+          }
+        }
+      }
+    }
+  });
+  
   nextTick(() => {
     const container = messagesContainer.value;
     if (container) {
@@ -960,6 +1132,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (unsubscribePlans) unsubscribePlans();
   if (unsubscribeMessages) unsubscribeMessages();
+  if (unsubscribePayments) unsubscribePayments();
   const container = messagesContainer.value;
   if (container) {
     container.removeEventListener('scroll', handleScroll);
@@ -1481,6 +1654,396 @@ const getEventStatusClass = (event) => {
   if (status === 'Đã kết thúc') return 'status-ended';
   return '';
 };
+
+const totalCustomAmount = computed(() =>
+  paymentSplits.value.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+);
+
+const isPaymentValid = computed(() =>
+  Number(totalCustomAmount.value) === Number(totalAmountToSplit.value) &&
+  paymentSplits.value.every(p => Number.isFinite(Number(p.amount)) && Number(p.amount) >= 0)
+);
+
+// Thêm computed property để tính tổng số tiền cần chia
+const totalAmountToSplit = computed(() => {
+  if (paymentForTransaction.value) {
+    return paymentForTransaction.value.amount;
+  }
+  if (!event.value?.transactions) return 0;
+  
+  // Tổng chi
+  const totalExpense = event.value.transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  // Tổng thu
+  const totalIncome = event.value.transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  // Tổng số tiền của các transaction đã chia tiền (có paymentSplits và length > 0)
+  const sumAllSplitted = event.value.transactions
+    .filter(t => t.type === 'expense' && t.paymentSplits && t.paymentSplits.length > 0)
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  // Số tiền cần chia = tổng chi - tổng thu - tổng các khoản đã chia
+  return (totalExpense - totalIncome) - sumAllSplitted;
+});
+
+const showPaymentModal = ref(false);
+const paymentSplits = ref([]); // [{uid, amount, payTo}]
+const paymentForTransaction = ref(null); // transaction object or null
+
+const openPaymentModalForTransaction = (transaction) => {
+  if (!event.value || !transaction) return;
+  paymentForTransaction.value = transaction;
+  const members = event.value.participants || [];
+  const total = transaction.amount;
+  const even = Math.floor(total / members.length);
+  const remainder = total - even * members.length;
+  paymentSplits.value = members.map((m, idx) => ({
+    uid: m.uid,
+    amount: even + (idx === 0 ? remainder : 0),
+    payTo: user.value.uid // mặc định trả cho người bấm
+  }));
+  showPaymentModal.value = true;
+};
+
+// Sửa lại confirmPaymentSplits để lưu paymentSplits cho transaction nếu có
+const confirmPaymentSplits = async () => {
+  if (!isPaymentValid.value || !event.value) return;
+  try {
+    const eventRef = doc(db, 'events', event.value.id);
+    if (paymentForTransaction.value) {
+      // Lưu paymentSplits vào transaction cụ thể (giữ nguyên logic cũ)
+      const newSplits = paymentSplits.value.map(p => ({
+        ...p,
+        status: 'pending',
+        createdAt: Timestamp.now(),
+        createdBy: user.value.uid,
+        transactionId: paymentForTransaction.value.id
+      }));
+      // Cập nhật transaction
+      const updatedTransactions = event.value.transactions.map(t => {
+        if (t.id === paymentForTransaction.value.id) {
+          return {
+            ...t,
+            paymentSplits: newSplits
+          };
+        }
+        return t;
+      });
+      // Merge vào event.paymentSplits.splits
+      let paymentSplitsData = event.value.paymentSplits && event.value.paymentSplits.splits ? [...event.value.paymentSplits.splits] : [];
+      paymentSplitsData = paymentSplitsData.filter(s => s.transactionId !== paymentForTransaction.value.id); // Xóa splits cũ của transaction này nếu có
+      paymentSplitsData.push(...newSplits);
+      const paymentSplitsObj = {
+        splits: paymentSplitsData,
+        totalAmount: (event.value.paymentSplits && event.value.paymentSplits.totalAmount) || 0,
+        createdAt: Timestamp.now(),
+        createdBy: user.value.uid
+      };
+      await updateDoc(eventRef, { transactions: updatedTransactions, paymentSplits: paymentSplitsObj });
+      event.value.transactions = updatedTransactions;
+      event.value.paymentSplits = paymentSplitsObj;
+    } else {
+      // Chia tổng: cập nhật trạng thái đã chia cho các transaction chưa chia
+      const updatedTransactions = event.value.transactions.map(t => {
+        if (t.type === 'expense' && (!t.paymentSplits || t.paymentSplits.length === 0)) {
+          return {
+            ...t,
+            paymentSplits: [{ isTotalSplit: true }]
+          };
+        }
+        return t;
+      });
+      const paymentData = {
+        splits: paymentSplits.value.map(p => ({
+          uid: p.uid,
+          amount: Number(p.amount),
+          payTo: p.payTo,
+          status: 'pending',
+          createdAt: Timestamp.now(),
+          createdBy: user.value.uid
+        })),
+        totalAmount: totalAmountToSplit.value,
+        createdAt: Timestamp.now(),
+        createdBy: {
+          uid: user.value.uid,
+          email: user.value.email,
+          displayName: user.value.displayName || user.value.email
+        }
+      };
+      await updateDoc(eventRef, {
+        transactions: updatedTransactions,
+        paymentSplits: paymentData,
+        lastUpdated: Timestamp.now()
+      });
+      event.value.transactions = updatedTransactions;
+      event.value.paymentSplits = paymentData;
+    }
+    closePaymentModal();
+    alert('Đã lưu thông tin chia tiền thành công!');
+  } catch (error) {
+    console.error('Error saving payment splits:', error);
+    alert('Có lỗi xảy ra khi lưu thông tin chia tiền. Vui lòng thử lại.');
+  }
+};
+
+const closePaymentModal = () => {
+  showPaymentModal.value = false;
+  paymentForTransaction.value = null;
+};
+
+// 1. Thêm tab mới vào giao diện
+const extraTabs = computed(() => {
+  if (event.value && event.value.paymentSplits && event.value.paymentSplits.splits) {
+    return [
+      { key: 'paymentHistory', label: 'Lịch sử thanh toán' }
+    ];
+  }
+  return [];
+});
+
+// ... existing code ...
+// 2. Thêm biến activeTab để hỗ trợ tab mới
+const allTabs = computed(() => [
+  { key: 'transactions', label: 'Thu chi' },
+  { key: 'plans', label: 'Kế hoạch' },
+  { key: 'statistics', label: 'Thống kê' },
+  { key: 'discussion', label: 'Thảo luận' },
+  ...extraTabs.value
+]);
+
+// ... existing code ...
+// 3. Hàm xác nhận thanh toán
+const splitLoading = ref({});
+
+const paymentTab = ref('toPay'); // 'toPay' | 'toReceive'
+
+const splitsToPay = computed(() => {
+  if (!user.value || !event.value?.paymentSplits?.splits) return [];
+  return event.value.paymentSplits.splits.filter(
+    split => split.uid === user.value.uid
+  );
+});
+const splitsToReceive = computed(() => {
+  if (!user.value || !event.value?.paymentSplits?.splits) return [];
+  return event.value.paymentSplits.splits.filter(
+    split => split.payTo === user.value.uid
+  );
+});
+
+const notification = ref({
+  show: false,
+  message: '',
+  type: 'success' // 'success' | 'error'
+});
+
+const showNotification = (message, type = 'success') => {
+  notification.value = {
+    show: true,
+    message,
+    type
+  };
+  // Tự động ẩn sau 3 giây
+  setTimeout(() => {
+    notification.value.show = false;
+  }, 3000);
+};
+
+const findSplitIndexInOriginalArray = (split) => {
+  if (!event.value?.paymentSplits?.splits) return -1;
+  return event.value.paymentSplits.splits.findIndex(
+    s => s.uid === split.uid && 
+         s.payTo === split.payTo && 
+         s.transactionId === split.transactionId
+  );
+};
+
+const sendPaidRequest = async (split) => {
+  if (!event.value || !event.value.paymentSplits) return;
+  
+  const splitIdx = findSplitIndexInOriginalArray(split);
+  if (splitIdx === -1) {
+    showNotification('Không tìm thấy khoản thanh toán!', 'error');
+    return;
+  }
+  
+  const loadingKey = `${split.uid}-${split.payTo}`;
+  splitLoading.value[loadingKey] = true;
+  try {
+    const eventRef = doc(db, 'events', event.value.id);
+    const paymentSplits = { ...event.value.paymentSplits };
+    const splits = [...paymentSplits.splits];
+    
+    // Update the specific split
+    splits[splitIdx] = {
+      ...splits[splitIdx],
+      status: 'paid',
+      paidAt: Timestamp.now(),
+      paidBy: user.value.uid,
+      confirmedByReceiver: false // Reset confirmation status
+    };
+    
+    // Update Firestore
+    await updateDoc(eventRef, {
+      paymentSplits: {
+        ...paymentSplits,
+        splits: splits
+      }
+    });
+    
+    // Update local state
+    event.value.paymentSplits.splits = splits;
+    showNotification('Đã gửi yêu cầu thành công!');
+  } catch (error) {
+    showNotification('Có lỗi khi gửi yêu cầu đã trả!', 'error');
+    console.error(error);
+  } finally {
+    splitLoading.value[loadingKey] = false;
+  }
+};
+
+const confirmReceived = async (split) => {
+  if (!event.value || !event.value.paymentSplits) return;
+  
+  const splitIdx = findSplitIndexInOriginalArray(split);
+  if (splitIdx === -1) {
+    showNotification('Không tìm thấy khoản thanh toán!', 'error');
+    return;
+  }
+  
+  const loadingKey = `${split.uid}-${split.payTo}`;
+  splitLoading.value[loadingKey] = true;
+  try {
+    const eventRef = doc(db, 'events', event.value.id);
+    const paymentSplits = { ...event.value.paymentSplits };
+    const splits = [...paymentSplits.splits];
+    
+    // Update the specific split
+    splits[splitIdx] = {
+      ...splits[splitIdx],
+      confirmedByReceiver: true,
+      confirmedAt: Timestamp.now()
+    };
+    
+    // Update Firestore
+    await updateDoc(eventRef, {
+      paymentSplits: {
+        ...paymentSplits,
+        splits: splits
+      }
+    });
+    
+    // Update local state
+    event.value.paymentSplits.splits = splits;
+    showNotification('Đã xác nhận nhận tiền!');
+  } catch (error) {
+    showNotification('Có lỗi khi xác nhận đã nhận tiền!', 'error');
+    console.error(error);
+  } finally {
+    splitLoading.value[loadingKey] = false;
+  }
+};
+
+// Thêm computed properties để đếm số lượng
+const pendingPaymentsToReceive = computed(() => {
+  if (!user.value || !event.value?.paymentSplits?.splits) return 0;
+  return event.value.paymentSplits.splits.filter(
+    split => split.payTo === user.value.uid && split.status === 'paid' && !split.confirmedByReceiver
+  ).length;
+});
+
+const pendingPaymentsToPay = computed(() => {
+  if (!user.value || !event.value?.paymentSplits?.splits) return 0;
+  return event.value.paymentSplits.splits.filter(
+    split => split.uid === user.value.uid && !split.confirmedByReceiver
+  ).length;
+});
+
+const totalPendingPayments = computed(() => {
+  return pendingPaymentsToReceive.value + pendingPaymentsToPay.value;
+});
+
+// Thêm hàm để lưu trạng thái đã thông báo vào local storage
+const saveNotifiedState = (split) => {
+  const storageKey = `notified_${event.value.id}_${split.uid}_${split.payTo}`;
+  localStorage.setItem(storageKey, 'true');
+};
+
+// Kiểm tra trạng thái đã thông báo
+const isAlreadyNotified = (split) => {
+  const storageKey = `notified_${event.value.id}_${split.uid}_${split.payTo}`;
+  return localStorage.getItem(storageKey) === 'true';
+};
+
+const showEndEventModal = ref(false);
+const isEndingEvent = ref(false);
+
+const endEvent = async () => {
+  if (!event.value) return;
+  isEndingEvent.value = true;
+  try {
+    const eventRef = doc(db, 'events', event.value.id);
+    await updateDoc(eventRef, { isEnded: true });
+    event.value.isEnded = true;
+    showEndEventModal.value = false;
+    // Optional: show notification
+    showNotification('Sự kiện đã được kết thúc!', 'success');
+  } catch (error) {
+    showNotification('Có lỗi khi kết thúc sự kiện!', 'error');
+    console.error(error);
+  } finally {
+    isEndingEvent.value = false;
+  }
+};
+
+const paymentError = ref('');
+
+const handleConfirmPaymentSplits = () => {
+  if (!isPaymentValid.value) {
+    paymentError.value = 'Số tiền chia chưa hợp lệ hoặc chưa đủ!';
+    alert(paymentError.value);
+    return;
+  }
+  paymentError.value = '';
+  confirmPaymentSplits();
+};
+
+const getTransactionDescription = (transactionId) => {
+  const transaction = event.value.transactions.find(t => t.id === transactionId);
+  return transaction ? transaction.description : 'Không có mô tả';
+};
+
+// Đảm bảo hàm openPaymentModal luôn hoạt động đúng
+const openPaymentModal = () => {
+  if (!event.value) return;
+  paymentForTransaction.value = null;
+  const members = event.value.participants || [];
+  const total = totalAmountToSplit.value;
+  const even = Math.floor(total / members.length);
+  const remainder = total - even * members.length;
+  paymentSplits.value = members.map((m, idx) => ({
+    uid: m.uid,
+    amount: even + (idx === 0 ? remainder : 0),
+    payTo: user.value.uid // mặc định trả cho người bấm
+  }));
+  showPaymentModal.value = true;
+};
+
+// Khi đổi tab, cập nhật query param trên URL
+watch(activeTab, (newTab) => {
+  if (route.query.tab !== newTab) {
+    router.replace({ query: { ...route.query, tab: newTab } });
+  }
+});
+// Khi URL thay đổi (back/forward), cập nhật tab
+watch(() => route.query.tab, (tab) => {
+  if (tab && tab !== activeTab.value) {
+    activeTab.value = tab;
+  }
+});
 </script>
 
 <style scoped>
@@ -3385,5 +3948,563 @@ textarea.form-input {
   box-shadow: 0 2px 6px rgba(33,150,243,0.15);
   z-index: 2;
   border: 2px solid #fff;
+}
+
+.tag-value {
+  color: #00796b;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.pay-btn {
+  background: #4CAF50;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  margin-left: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.pay-btn:hover {
+  background: #388e3c;
+}
+.payment-modal {
+  max-width: 520px;
+}
+.payment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.payment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.member-name {
+  min-width: 120px;
+  font-weight: 500;
+  color: #333;
+}
+.payment-input {
+  width: 90px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  font-size: 15px;
+  text-align: right;
+}
+.currency {
+  color: #888;
+  font-size: 15px;
+  margin-left: 2px;
+}
+.pay-for-label {
+  margin-left: 10px;
+  font-size: 13px;
+  color: #666;
+}
+.pay-for-select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #4CAF50;
+  background: #fff;
+  color: #333;
+  font-size: 14px;
+  outline: none;
+  margin-left: 4px;
+}
+.payment-summary {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 15px;
+  color: #333;
+}
+
+.payment-history-section {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  margin-top: 20px;
+}
+
+.payment-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-radius: 6px;
+  background: #f8f9fa;
+}
+
+.member-name {
+  font-size: 16px;
+  color: #333;
+}
+
+.amount {
+  font-size: 14px;
+  color: #666;
+}
+
+.pay-to {
+  font-size: 14px;
+  color: #666;
+}
+
+.status {
+  font-size: 14px;
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.status.paid {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.status.pending {
+  background: #fff3e0;
+  color: #f57f17;
+}
+
+.check-btn {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.check-btn:hover {
+  background: #43A047;
+}
+
+.paid-time {
+  font-size: 12px;
+  color: #666;
+}
+
+.pay-to-link {
+  color: #1976d2;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+.pay-to-link:hover {
+  color: #1565c0;
+}
+
+.notification {
+  position: relative;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  animation: fadeIn 0.3s, fadeOut 0.5s 2.5s;
+}
+
+.notification.success {
+  background-color: #e8f5e9;
+  color: #388e3c;
+  border: 1px solid #a5d6a7;
+}
+
+.notification.error {
+  background-color: #ffebee;
+  color: #d32f2f;
+  border: 1px solid #ef9a9a;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.badge-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f44336;
+  color: white;
+  border-radius: 50%;
+  min-width: 20px;
+  height: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 0 6px;
+  margin-left: 8px;
+}
+
+.tab-btn .badge-counter {
+  position: relative;
+  top: -1px;
+  font-size: 11px;
+  min-width: 18px;
+  height: 18px;
+}
+
+.badge-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f44336;
+  color: white;
+  border-radius: 50%;
+  min-width: 20px;
+  height: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 0 6px;
+  margin-left: 8px;
+}
+
+.tabs-section .badge-counter {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 28px;
+  height: 28px;
+  font-size: 15px;
+  box-shadow: 0 2px 6px rgba(244,67,54,0.15);
+  z-index: 2;
+  border: 2px solid #fff;
+}
+
+.tab-btn .badge-counter {
+  position: relative;
+  top: -1px;
+  font-size: 11px;
+  min-width: 18px;
+  height: 18px;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background-color: #f44336;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  transform: translate(30%, -30%);
+}
+
+.end-event-btn {
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  margin-left: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.end-event-btn:hover {
+  background: #b71c1c;
+}
+
+.split-status {
+  display: inline-block;
+  background: #e8f5e9;
+  color: #388e3c;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.payment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.payment-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.transaction-description {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.payment-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  gap: 16px;
+}
+
+.payment-modal .modal-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+.payment-modal .modal-body {
+  padding: 20px;
+}
+
+.payment-modal .modal-footer {
+  padding: 16px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cancel-button {
+  padding: 8px 16px;
+  background: #f5f5f5;
+  border: none;
+  border-radius: 6px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-button:hover {
+  background: #e0e0e0;
+}
+
+.submit-button {
+  padding: 8px 24px;
+  background: #4CAF50;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submit-button:hover:not(:disabled) {
+  background: #43A047;
+}
+
+.submit-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.payment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.payment-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.payment-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.payment-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status.paid {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.status.pending {
+  background: #fff3e0;
+  color: #f57f17;
+}
+
+.confirmed-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #388e3c;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.confirmed-badge i {
+  font-size: 16px;
+}
+
+.payment-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  gap: 20px;
+  border: 1px solid #eee;
+  transition: all 0.2s;
+}
+
+.payment-history-row:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  transform: translateY(-1px);
+}
+
+.member-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.amount {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2E7D32;
+  font-family: monospace;
+}
+
+.transaction-description {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pay-to {
+  font-size: 13px;
+  color: #666;
+}
+
+.pay-to-link {
+  color: #1976d2;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.pay-to-link:hover {
+  color: #1565c0;
+}
+
+.check-btn {
+  padding: 6px 12px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.check-btn:hover:not(:disabled) {
+  background: #43A047;
+}
+
+.check-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.transaction-description.highlight {
+  font-weight: bold;
+  color: #1565c0;
+  background: #e3f2fd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin-top: 2px;
+  display: inline-block;
+  font-size: 15px;
+}
+
+.payment-receive-row .payer-name {
+  font-weight: 600;
+  color: #1976d2;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+.payment-receive-row .receive-description {
+  font-style: italic;
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.payment-receive-row .receive-amount {
+  color: #2E7D32;
+  font-size: 18px;
+  font-weight: bold;
+  margin-top: 2px;
+}
+
+.payer-link {
+  color: #1976d2;
+  cursor: pointer;
+  text-decoration: underline;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+.payer-link:hover {
+  color: #0d47a1;
+}
+
+.payer-label {
+  color: #888;
+  font-size: 13px;
+  font-weight: 400;
+  margin-right: 2px;
 }
 </style> 

@@ -34,7 +34,7 @@
             </select>
           </div>
           <div v-if="friends.length > 0">
-            <button @click="showAddEventModal = true" class="add-button">
+            <button @click="openAddEventModal()" class="add-button">
               <i class="fas fa-plus"></i>
               Thêm sự kiện
             </button>
@@ -132,41 +132,51 @@
               <span class="info-value">{{ formatCurrency(event.totalAmount || 0) }}</span>
             </div>
           </div>
+          <div v-if="event.createdBy.uid === user?.uid" class="event-actions">
+            <button class="edit-event-button" @click.stop="editEvent(event)">
+              <i class="fas fa-edit"></i>
+              Chỉnh sửa
+            </button>
+            <button class="delete-event-button" @click.stop="showDeleteConfirm(event)">
+              <i class="fas fa-trash"></i>
+              Xóa
+            </button>
+          </div>
           <span v-if="hasUnreadNotification(event)" class="event-badge"></span>
         </div>
       </div>
   
-      <!-- Add Event Modal -->
-      <div v-if="showAddEventModal" class="modal-overlay" @click="closeAddEventModal">
+      <!-- Add/Edit Event Modal -->
+      <div v-if="showEventModal" class="modal-overlay" @click="closeEventModal">
         <div class="modal-content" @click.stop>
           <div class="modal-header">
-            <h3>Thêm sự kiện mới</h3>
-            <button class="close-button" @click="closeAddEventModal">×</button>
+            <h3>{{ isEditing ? 'Chỉnh sửa sự kiện' : 'Thêm sự kiện mới' }}</h3>
+            <button class="close-button" @click="closeEventModal">×</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
               <label>Tiêu đề <span class="required">*</span></label>
-              <input v-model="newEvent.title" type="text" class="form-input" placeholder="Nhập tiêu đề sự kiện">
+              <input v-model="eventForm.title" type="text" class="form-input" placeholder="Nhập tiêu đề sự kiện">
             </div>
             <div class="form-group">
               <label>Mô tả</label>
-              <textarea v-model="newEvent.description" class="form-input" placeholder="Nhập mô tả sự kiện"></textarea>
+              <textarea v-model="eventForm.description" class="form-input" placeholder="Nhập mô tả sự kiện"></textarea>
             </div>
             <div class="form-group">
               <label>Thời gian bắt đầu</label>
-              <input v-model="newEvent.startDate" type="datetime-local" class="form-input">
+              <input v-model="eventForm.startDate" type="datetime-local" class="form-input">
             </div>
             <div class="form-group">
               <label>Thời gian kết thúc</label>
-              <input v-model="newEvent.endDate" type="datetime-local" class="form-input">
+              <input v-model="eventForm.endDate" type="datetime-local" class="form-input">
             </div>
             <div class="form-group">
               <label>Địa điểm</label>
-              <input v-model="newEvent.location" type="text" class="form-input" placeholder="Nhập địa điểm">
+              <input v-model="eventForm.location" type="text" class="form-input" placeholder="Nhập địa điểm">
             </div>
             <div class="form-group">
               <label>Tag</label>
-              <select v-model="newEvent.tag" class="form-input tag-select">
+              <select v-model="eventForm.tag" class="form-input tag-select">
                 <option value="Khác">Khác</option>
                 <option value="Gia đình">Gia đình</option>
                 <option value="Người yêu">Người yêu</option>
@@ -225,18 +235,55 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button class="cancel-button" @click="closeAddEventModal">
+            <button class="cancel-button" @click="closeEventModal">
               <i class="fas fa-times"></i>
               Hủy
             </button>
             <button 
               class="submit-button" 
               :disabled="!isValidEventForm"
-              @click="createEvent">
-              <i class="fas fa-plus"></i>
-              Tạo sự kiện
+              @click="isEditing ? updateEvent() : createEvent()">
+              <i :class="isEditing ? 'fas fa-save' : 'fas fa-plus'"></i>
+              {{ isEditing ? 'Lưu thay đổi' : 'Tạo sự kiện' }}
             </button>
           </div>
+        </div>
+      </div>
+  
+      <!-- Delete Confirmation Modal -->
+      <div v-if="showDeleteModal" class="modal-overlay" @click="closeDeleteModal">
+        <div class="modal-content delete-confirm-modal" @click.stop>
+          <div class="modal-header">
+            <h3>Xác nhận xóa sự kiện</h3>
+            <button class="close-button" @click="closeDeleteModal">×</button>
+          </div>
+          <div class="modal-body">
+            <p>Bạn có chắc chắn muốn xóa sự kiện "{{ eventToDelete?.name }}"?</p>
+            <p class="warning-text">Hành động này không thể hoàn tác và sẽ xóa tất cả dữ liệu liên quan đến sự kiện.</p>
+          </div>
+          <div class="modal-footer">
+            <button class="cancel-button" @click="closeDeleteModal">
+              <i class="fas fa-times"></i>
+              Hủy
+            </button>
+            <button class="delete-confirm-button" @click="confirmDelete">
+              <i class="fas fa-trash"></i>
+              Xóa sự kiện
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete Success Notification -->
+      <div v-if="showDeleteSuccess" class="delete-notification">
+        <div class="notification-content">
+          <div class="notification-icon">
+            <i class="fa-solid fa-circle-check"></i>
+          </div>
+          <span>Đã xóa sự kiện thành công</span>
+          <button class="close-notification" @click="closeDeleteSuccess">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
       </div>
     </div>
@@ -244,7 +291,7 @@
   
   <script setup>
   import { ref, onMounted, computed } from 'vue';
-  import { collection, addDoc, query, getDocs, where, serverTimestamp, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+  import { collection, addDoc, query, getDocs, where, serverTimestamp, onSnapshot, updateDoc, doc, deleteDoc } from 'firebase/firestore';
   import { db } from '~/plugins/firebase';
   import { useAuth } from '~/composables/useAuth';
   import { useFriends } from '~/composables/useFriends';
@@ -267,6 +314,22 @@
   const friendSearchQuery = ref('');
   const eventNotifications = ref({});
   let unsubscribeEvents = null;
+  const showDeleteModal = ref(false);
+  const eventToDelete = ref(null);
+  const showEventModal = ref(false);
+  const isEditing = ref(false);
+  const eventForm = ref({
+    id: null,
+    title: '',
+    description: '',
+    location: '',
+    startDate: null,
+    endDate: null,
+    tag: 'Khác'
+  });
+  
+  const showDeleteSuccess = ref(false);
+  let deleteSuccessTimeout = null;
   
   // Add formatDate function
   const formatDate = (date) => {
@@ -282,19 +345,6 @@
       minute: '2-digit'
     }).format(date);
   };
-  
-  // Initialize new event with proper structure
-  const newEvent = ref({
-    title: '',
-    description: '',
-    location: '',
-    startDate: null,
-    endDate: null,
-    participants: [],
-    totalAmount: 0,
-    isEnded: false,
-    tag: 'Khác'
-  });
   
   // Format tiền tệ
   const formatCurrency = (amount) => {
@@ -328,7 +378,8 @@
   
   // Mở modal thêm sự kiện
   const openAddEventModal = () => {
-    showAddEventModal.value = true;
+    isEditing.value = false;
+    showEventModal.value = true;
   };
   
   // Create event function
@@ -357,17 +408,17 @@
 
       // Prepare event data
       const eventData = {
-        name: newEvent.value.title,
-        description: newEvent.value.description || '',
-        location: newEvent.value.location || '',
-        startDate: newEvent.value.startDate ? new Date(newEvent.value.startDate) : null,
-        endDate: newEvent.value.endDate ? new Date(newEvent.value.endDate) : null,
+        name: eventForm.value.title,
+        description: eventForm.value.description || '',
+        location: eventForm.value.location || '',
+        startDate: eventForm.value.startDate ? new Date(eventForm.value.startDate) : null,
+        endDate: eventForm.value.endDate ? new Date(eventForm.value.endDate) : null,
         participants: [creatorData, ...selectedFriendsData],
         participantsUid: [creatorData.uid, ...selectedFriendsData.map(f => f.uid)],
         createdBy: creatorData,
         totalAmount: 0,
         isEnded: false,
-        tag: newEvent.value.tag,
+        tag: eventForm.value.tag,
         createdAt: serverTimestamp()
       };
 
@@ -375,8 +426,7 @@
       await addDoc(collection(db, 'events'), eventData);
 
       // Reset form and close modal
-      resetForm();
-      showAddEventModal.value = false;
+      closeEventModal();
     } catch (error) {
       console.error('Error creating event:', error);
       alert('Có lỗi xảy ra khi tạo sự kiện. Vui lòng thử lại.');
@@ -511,22 +561,21 @@
   
   // Update form validation
   const isValidEventForm = computed(() => {
-    return newEvent.value.title &&
+    return eventForm.value.title &&
            selectedFriends.value.length > 0;
   });
   
   // Update close modal function
-  const closeAddEventModal = () => {
-    showAddEventModal.value = false;
-    newEvent.value = {
+  const closeEventModal = () => {
+    showEventModal.value = false;
+    isEditing.value = false;
+    eventForm.value = {
+      id: null,
       title: '',
       description: '',
       location: '',
       startDate: null,
       endDate: null,
-      participants: [],
-      totalAmount: 0,
-      isEnded: false,
       tag: 'Khác'
     };
     selectedFriends.value = [];
@@ -575,6 +624,132 @@
     if (status === 'Đang diễn ra') return 'status-active';
     if (status === 'Đã kết thúc') return 'status-ended';
     return '';
+  };
+  
+  // Add deleteEvent function
+  const deleteEvent = async (event) => {
+    if (!user.value || event.createdBy.uid !== user.value.uid) return;
+    
+    if (confirm('Bạn có chắc chắn muốn xóa sự kiện này? Hành động này không thể hoàn tác.')) {
+      try {
+        const eventRef = doc(db, 'events', event.id);
+        await deleteDoc(eventRef);
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        alert('Có lỗi xảy ra khi xóa sự kiện. Vui lòng thử lại.');
+      }
+    }
+  };
+  
+  // Add editEvent function
+  const editEvent = (event) => {
+    isEditing.value = true;
+    eventForm.value = {
+      id: event.id,
+      title: event.name,
+      description: event.description,
+      location: event.location,
+      startDate: event.startDate ? new Date(event.startDate).toISOString().slice(0, 16) : null,
+      endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : null,
+      tag: event.tag
+    };
+    // Set selected friends
+    selectedFriends.value = event.participants
+      .filter(p => p.uid !== user.value.uid)
+      .map(p => p.uid);
+    showEventModal.value = true;
+  };
+  
+  // Add updateEvent function
+  const updateEvent = async () => {
+    if (!user.value || !isValidEventForm.value) return;
+    
+    try {
+      // Get selected friends' data
+      const selectedFriendsData = selectedFriends.value.map(friendId => {
+        const friend = getFriendById(friendId);
+        return {
+          uid: friend.id,
+          email: friend.email,
+          displayName: friend.displayName || friend.email,
+          photoURL: friend.photoURL
+        };
+      });
+
+      // Add creator to participants
+      const creatorData = {
+        uid: user.value.uid,
+        email: user.value.email,
+        displayName: user.value.displayName || user.value.email,
+        photoURL: user.value.photoURL
+      };
+
+      // Prepare event data
+      const eventData = {
+        name: eventForm.value.title,
+        description: eventForm.value.description || '',
+        location: eventForm.value.location || '',
+        startDate: eventForm.value.startDate ? new Date(eventForm.value.startDate) : null,
+        endDate: eventForm.value.endDate ? new Date(eventForm.value.endDate) : null,
+        participants: [creatorData, ...selectedFriendsData],
+        participantsUid: [creatorData.uid, ...selectedFriendsData.map(f => f.uid)],
+        tag: eventForm.value.tag,
+        lastUpdated: serverTimestamp()
+      };
+
+      // Update in Firestore
+      const eventRef = doc(db, 'events', eventForm.value.id);
+      await updateDoc(eventRef, eventData);
+
+      // Reset form and close modal
+      closeEventModal();
+    } catch (error) {
+      console.error('Error updating event:', error);
+      alert('Có lỗi xảy ra khi cập nhật sự kiện. Vui lòng thử lại.');
+    }
+  };
+  
+  // Add delete confirmation functions
+  const showDeleteConfirm = (event) => {
+    eventToDelete.value = event;
+    showDeleteModal.value = true;
+  };
+  
+  const closeDeleteModal = () => {
+    showDeleteModal.value = false;
+    eventToDelete.value = null;
+  };
+  
+  const closeDeleteSuccess = () => {
+    showDeleteSuccess.value = false;
+    if (deleteSuccessTimeout) {
+      clearTimeout(deleteSuccessTimeout);
+      deleteSuccessTimeout = null;
+    }
+  };
+  
+  const showDeleteSuccessNotification = () => {
+    showDeleteSuccess.value = true;
+    if (deleteSuccessTimeout) {
+      clearTimeout(deleteSuccessTimeout);
+    }
+    deleteSuccessTimeout = setTimeout(() => {
+      showDeleteSuccess.value = false;
+    }, 3000);
+  };
+  
+  const confirmDelete = async () => {
+    if (!eventToDelete.value) return;
+    
+    try {
+      const eventRef = doc(db, 'events', eventToDelete.value.id);
+      await deleteDoc(eventRef);
+      closeDeleteModal();
+      showDeleteSuccessNotification();
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      alert('Có lỗi xảy ra khi xóa sự kiện. Vui lòng thử lại.');
+    }
   };
   
   onMounted(async () => {
@@ -694,6 +869,7 @@
     cursor: pointer;
     transition: all 0.2s ease;
     position: relative;
+    padding-bottom: 60px;
   }
   
   .event-card:hover {
@@ -724,7 +900,7 @@
   
   .event-status.active {
     background-color: #e8f5e9;
-    color: #2E7D32;
+    color: #388e3c;
   }
   
   .event-status.ended {
@@ -854,7 +1030,7 @@
     cursor: pointer;
     transition: all 0.2s;
     position: relative;
-    padding-right: 40px; /* Space for the checkmark */
+    padding-right: 40px;
   }
   
   .friend-option:hover {
@@ -888,19 +1064,16 @@
     transform: scale(1);
   }
   
-  /* Add a subtle border when hovering */
   .friend-option:hover:not(.selected) {
     border: 1px solid #e0e0e0;
-    padding: 7px 39px 7px 7px; /* Adjust padding to account for border */
+    padding: 7px 39px 7px 7px;
   }
   
-  /* Add a green border when selected */
   .friend-option.selected {
     border: 1px solid #4CAF50;
     padding: 7px 39px 7px 7px;
   }
   
-  /* Add checkmark background */
   .friend-option.selected .check-icon {
     background: #4CAF50;
     color: white;
@@ -1140,13 +1313,13 @@
       min-width: 100%;
     }
   }
-
+  
   @media (max-width: 768px) {
     .modal-overlay {
       align-items: flex-end;
       background-color: rgba(0, 0, 0, 0.7);
     }
-
+  
     .modal-content {
       width: 100%;
       max-width: 100%;
@@ -1156,17 +1329,17 @@
       border-radius: 20px 20px 0 0;
       animation: slide-up 0.3s ease;
     }
-
+  
     .modal-header {
       padding: 20px;
       background: white;
     }
-
+  
     .modal-footer {
       padding: 16px;
       box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     }
-
+  
     .cancel-button,
     .submit-button {
       flex: 1;
@@ -1175,7 +1348,7 @@
       font-size: 16px;
     }
   }
-
+  
   @keyframes slide-up {
     from {
       transform: translateY(100%);
@@ -1184,7 +1357,7 @@
       transform: translateY(0);
     }
   }
-
+  
   @keyframes modal-appear {
     from {
       opacity: 0;
@@ -1195,7 +1368,7 @@
       transform: translateY(0);
     }
   }
-
+  
   .event-badge {
     display: inline-block;
     width: 12px;
@@ -1205,18 +1378,20 @@
     margin-left: 8px;
     vertical-align: middle;
   }
-
+  
   .tag-filter-bar-inline {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-left: 12px;
   }
+  
   .tag-filter-label {
     font-size: 14px;
     color: #333;
     font-weight: 500;
   }
+  
   .tag-filter-select {
     padding: 8px 36px 8px 16px;
     border-radius: 16px;
@@ -1230,14 +1405,17 @@
     appearance: none;
     cursor: pointer;
   }
+  
   .tag-filter-select:focus {
     border-color: #388e3c;
     box-shadow: 0 0 0 2px rgba(76,175,80,0.12);
   }
+  
   .tag-filter-select:hover {
     border-color: #388e3c;
     background-color: #f1f8e9;
   }
+  
   .tag-select {
     padding: 10px 16px;
     border-radius: 8px;
@@ -1249,9 +1427,11 @@
     transition: border-color 0.2s;
     margin-top: 4px;
   }
+  
   .tag-select:focus {
     border-color: #388e3c;
   }
+  
   .event-tag-row {
     display: flex;
     align-items: center;
@@ -1260,6 +1440,7 @@
     margin-bottom: 0;
     position: static;
   }
+  
   .event-tag {
     background: #e0f2f1;
     color: #00796b;
@@ -1270,6 +1451,7 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.04);
     pointer-events: none;
   }
+  
   .event-status-label {
     font-size: 13px;
     font-weight: 500;
@@ -1277,24 +1459,29 @@
     border-radius: 16px;
     pointer-events: none;
   }
+  
   .status-upcoming {
     background: #fffde7;
     color: #fbc02d;
     border: 1px solid #ffe082;
   }
+  
   .status-active {
     background: #e8f5e9;
     color: #388e3c;
     border: 1px solid #a5d6a7;
   }
+  
   .status-ended {
     background: #ffebee;
     color: #c62828;
     border: 1px solid #ef9a9a;
   }
+  
   .event-card {
     position: relative;
   }
+  
   .event-status-label-top {
     position: absolute;
     top: 16px;
@@ -1306,6 +1493,7 @@
     pointer-events: none;
     z-index: 2;
   }
+  
   .event-tag-under {
     display: inline-block;
     margin-top: 8px;
@@ -1318,17 +1506,20 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.04);
     pointer-events: none;
   }
+  
   .status-filter-bar-inline {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-left: 12px;
   }
+  
   .status-filter-label {
     font-size: 14px;
     color: #333;
     font-weight: 500;
   }
+  
   .status-filter-select {
     padding: 8px 36px 8px 16px;
     border-radius: 16px;
@@ -1342,19 +1533,321 @@
     appearance: none;
     cursor: pointer;
   }
+  
   .status-filter-select:focus {
     border-color: #388e3c;
     box-shadow: 0 0 0 2px rgba(76,175,80,0.12);
   }
+  
   .status-filter-select:hover {
     border-color: #388e3c;
     background-color: #f1f8e9;
   }
+  
   @media (max-width: 768px) {
     .tag-filter-bar-inline,
     .status-filter-bar-inline {
       margin-left: 0;
       margin-top: 8px;
+    }
+  }
+  
+  .event-actions {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    gap: 8px;
+    z-index: 1;
+  }
+  
+  .edit-event-button {
+    padding: 8px 16px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .edit-event-button:hover {
+    background-color: #1976D2;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  }
+  
+  .delete-event-button {
+    padding: 8px 16px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .delete-event-button:hover {
+    background-color: #d32f2f;
+    transform: translateY(-1px);
+  }
+  
+  @media (max-width: 768px) {
+    .event-actions {
+      flex-direction: column;
+      right: 12px;
+      bottom: 12px;
+    }
+  
+    .edit-event-button,
+    .delete-event-button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+  
+  /* Delete confirmation modal styles */
+  .delete-confirm-modal {
+    max-width: 400px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    animation: modal-appear 0.3s ease;
+  }
+  
+  .delete-confirm-modal .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #eee;
+    background: #fff;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .delete-confirm-modal .modal-header h3 {
+    color: #f44336;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+  }
+  
+  .delete-confirm-modal .modal-body {
+    padding: 24px 20px;
+    text-align: center;
+  }
+  
+  .delete-confirm-modal .modal-body p {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #333;
+  }
+  
+  .delete-confirm-modal .warning-text {
+    color: #f44336;
+    font-size: 14px;
+    margin-top: 12px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  
+  .delete-confirm-modal .warning-text::before {
+    content: "⚠️";
+    font-size: 16px;
+  }
+  
+  .delete-confirm-modal .modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    background: #f8f9fa;
+    border-radius: 0 0 16px 16px;
+  }
+  
+  .delete-confirm-modal .cancel-button {
+    padding: 10px 20px;
+    background: #f5f5f5;
+    color: #666;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .delete-confirm-modal .cancel-button:hover {
+    background: #e0e0e0;
+    color: #333;
+  }
+  
+  .delete-confirm-modal .delete-confirm-button {
+    padding: 10px 20px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(244,67,54,0.2);
+  }
+  
+  .delete-confirm-modal .delete-confirm-button:hover {
+    background: #d32f2f;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(244,67,54,0.3);
+  }
+  
+  .delete-confirm-modal .close-button {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 4px;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  
+  .delete-confirm-modal .close-button:hover {
+    background: #f5f5f5;
+    color: #333;
+  }
+  
+  @media (max-width: 768px) {
+    .delete-confirm-modal {
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      border-radius: 20px 20px 0 0;
+      animation: slide-up 0.3s ease;
+    }
+  
+    .delete-confirm-modal .modal-footer {
+      padding: 16px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    }
+  
+    .delete-confirm-modal .cancel-button,
+    .delete-confirm-modal .delete-confirm-button {
+      flex: 1;
+      justify-content: center;
+      padding: 12px 24px;
+      font-size: 16px;
+    }
+  }
+
+  /* Delete Success Notification Styles */
+  .delete-notification {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 10000;
+    animation: slide-in 0.3s ease;
+  }
+
+  .notification-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #4CAF50;
+    color: white;
+    padding: 16px 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    min-width: 300px;
+  }
+
+  .notification-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+  }
+
+  .notification-icon i {
+    font-size: 20px;
+    color: white;
+  }
+
+  .notification-content span {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .close-notification {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .close-notification:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
+  .close-notification i {
+    font-size: 16px;
+  }
+
+  @keyframes slide-in {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .delete-notification {
+      bottom: 16px;
+      right: 16px;
+      left: 16px;
+    }
+
+    .notification-content {
+      min-width: auto;
+      width: 100%;
     }
   }
   </style> 

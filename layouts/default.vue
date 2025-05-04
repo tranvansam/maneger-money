@@ -1,5 +1,9 @@
 <template>
   <div class="app-layout" :class="{'has-mobile-nav': isMobile}">
+    <div v-if="showAppLoading" class="app-loading-overlay">
+      <div class="app-loading-spinner"></div>
+      <div class="app-loading-text">Sắp xong rồi, đợi tý nhé…</div>
+    </div>
     <ClientOnly>
       <AppSidebar ref="sidebar" @open-quick-add="openQuickAddModal" />
     </ClientOnly>
@@ -86,6 +90,7 @@ const showQuickAddModal = ref(false);
 const showUserMenu = ref(false);
 const isMobile = ref(false);
 const authUnsubscribe = ref(null);
+const showAppLoading = ref(true);
 
 // Setup direct auth state listener
 const setupAuthListener = () => {
@@ -178,6 +183,10 @@ onMounted(() => {
   if (!sidebar.value) {
     console.warn('Sidebar reference not set on mount');
   }
+
+  setTimeout(() => {
+    showAppLoading.value = false;
+  }, 1500);
 });
 
 onUnmounted(() => {
@@ -203,6 +212,40 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+.app-loading-overlay {
+  position: fixed;
+  z-index: 99999;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(255,255,255,0.98);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.3s;
+}
+.app-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 5px solid #e0e0e0;
+  border-top: 5px solid #4CAF50;
+  border-radius: 50%;
+  animation: app-spin 1s linear infinite;
+  margin-bottom: 24px;
+}
+.app-loading-text {
+  font-size: 18px;
+  color: #388e3c;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+@keyframes app-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
 
