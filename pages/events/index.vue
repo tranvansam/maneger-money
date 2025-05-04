@@ -7,18 +7,33 @@
   
       <div class="page-header">
         <h1 class="page-title">Quản lý sự kiện</h1>
-        <div class="header-actions">
-          <div class="search-container">
-            <div class="search-input-wrapper">
-              <i class="fas fa-search search-icon"></i>
-              <input
-                v-model="searchQuery"
-                type="text"
-                placeholder="Tìm kiếm sự kiện..."
-                class="search-input"
-              />
-            </div>
+        <div v-if="friends.length > 0">
+          <button @click="openAddEventModal()" class="add-button">
+            <i class="fas fa-plus"></i>
+            Thêm sự kiện
+          </button>
+        </div>
+        <div v-else>
+          <NuxtLink to="/friends" class="add-friends-button">
+            <i class="fas fa-user-plus"></i>
+            Thêm bạn bè
+          </NuxtLink>
+        </div>
+      </div>
+  
+      <div class="header-actions">
+        <div class="search-container">
+          <div class="search-input-wrapper">
+            <i class="fas fa-search search-icon"></i>
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Tìm kiếm sự kiện..."
+              class="search-input"
+            />
           </div>
+        </div>
+        <div class="filter-row-mobile">
           <div class="tag-filter-bar-inline">
             <label for="tagFilter" class="tag-filter-label">Tag:</label>
             <select id="tagFilter" v-model="filterTag" class="tag-filter-select">
@@ -28,22 +43,10 @@
           <div class="status-filter-bar-inline">
             <label for="statusFilter" class="status-filter-label">Trạng thái:</label>
             <select id="statusFilter" v-model="filterStatus" class="status-filter-select">
-              <option value="Còn hoạt động">Còn hoạt động</option>
+              <option value="Còn hoạt động">Hoạt động</option>
               <option value="Kết thúc">Kết thúc</option>
               <option value="Tất cả">Tất cả</option>
             </select>
-          </div>
-          <div v-if="friends.length > 0">
-            <button @click="openAddEventModal()" class="add-button">
-              <i class="fas fa-plus"></i>
-              Thêm sự kiện
-            </button>
-          </div>
-          <div v-else>
-            <NuxtLink to="/friends" class="add-friends-button">
-              <i class="fas fa-user-plus"></i>
-              Thêm bạn bè
-            </NuxtLink>
           </div>
         </div>
       </div>
@@ -86,14 +89,14 @@
               />
               <div class="creator-info">
                 <h3 class="event-title">{{ event.name }}</h3>
-                <div class="creator-name" @click.stop="navigateToProfile(event.createdBy.uid)">
-                  {{ event.createdBy?.displayName || event.createdBy?.email }}
+                <div class="event-creator-label">
+                  Người tạo: <span class="event-creator-name">{{ event.createdBy?.displayName || event.createdBy?.email }}</span>
                 </div>
               </div>
             </div>
           </div>
   
-          <p class="event-description">{{ event.description || 'Không có mô tả' }}</p>
+          <p class="event-description">Mô tả: {{ event.description || 'Không có mô tả' }}</p>
           
           <div class="event-details">
             <div class="detail-item">
@@ -129,17 +132,17 @@
             </div>
             <div class="total-amount">
               <span class="info-label">Tổng chi tiêu:</span>
-              <span class="info-value">{{ formatCurrency(event.totalAmount || 0) }}</span>
+              <span class="info-value">{{ formatCurrency(event.totalExpense || 0) }}</span>
             </div>
           </div>
           <div v-if="event.createdBy.uid === user?.uid" class="event-actions">
             <button class="edit-event-button" @click.stop="editEvent(event)">
               <i class="fas fa-edit"></i>
-              Chỉnh sửa
+              <span>Chỉnh sửa</span>
             </button>
             <button class="delete-event-button" @click.stop="showDeleteConfirm(event)">
               <i class="fas fa-trash"></i>
-              Xóa
+              <span>Xóa</span>
             </button>
           </div>
           <span v-if="hasUnreadNotification(event)" class="event-badge"></span>
@@ -1299,18 +1302,93 @@
     color: #4CAF50;
   }
   
+  @media (min-width: 769px) {
+    .header-actions {
+      flex-direction: row;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .search-container {
+      flex: 2;
+      min-width: 220px;
+      margin-bottom: 0;
+    }
+    .filter-row-mobile {
+      display: flex;
+      flex-direction: row;
+      gap: 12px;
+      flex: 1;
+      margin-bottom: 0;
+    }
+    .tag-filter-bar-inline, .status-filter-bar-inline {
+      margin-left: 0;
+      margin-top: 0;
+      flex: 1;
+      min-width: 120px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tag-filter-bar-inline select, .status-filter-bar-inline select {
+      width: 100%;
+    }
+  }
+  
   @media (max-width: 768px) {
     .page-header {
-      flex-direction: column;
-      align-items: stretch;
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      justify-content: space-between;
     }
-  
+    .page-title {
+      font-size: 20px;
+      padding-left: 6px;
+      margin-bottom: 0;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .add-button {
+      font-size: 15px;
+      padding: 8px 14px;
+      margin-left: 0;
+      margin-bottom: 0;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
     .header-actions {
       flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      margin-top: 0;
     }
-  
     .search-container {
-      min-width: 100%;
+      width: 100%;
+      min-width: 0;
+      margin-bottom: 8px;
+    }
+    .filter-row-mobile {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .tag-filter-bar-inline, .status-filter-bar-inline {
+      margin-left: 0;
+      margin-top: 0;
+    }
+    .tag-filter-bar-inline select, .status-filter-bar-inline select {
+      width: 100%;
     }
   }
   
@@ -1548,7 +1626,7 @@
     .tag-filter-bar-inline,
     .status-filter-bar-inline {
       margin-left: 0;
-      margin-top: 8px;
+      margin-top: 0;
     }
   }
   
@@ -1849,5 +1927,16 @@
       min-width: auto;
       width: 100%;
     }
+  }
+
+  .event-creator-label {
+    font-size: 13px;
+    color: #888;
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+  .event-creator-name {
+    color: #1976d2;
+    font-weight: 500;
   }
   </style> 

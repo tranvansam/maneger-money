@@ -2048,7 +2048,7 @@ watch(() => route.query.tab, (tab) => {
 
 <style scoped>
 .event-detail-page {
-  padding: 20px;
+  /* padding: 20px; */
   max-width: 1200px;
   margin: 0 auto;
   min-height: 100vh;
@@ -2121,14 +2121,25 @@ watch(() => route.query.tab, (tab) => {
 
 .event-status-label-top {
   position: absolute;
-  top: 20px;
-  right: 30px;
+  top: -18px;
+  right: 20px;
   font-size: 14px;
   font-weight: 500;
   padding: 6px 18px;
   border-radius: 18px;
   pointer-events: none;
   z-index: 2;
+  top: -13px;
+  right: 8px;
+  font-size: 13px;
+  padding: 4px 14px;
+
+  /* @media (max-width: 480px) {
+    top: 12px;
+    right: 15px;
+    font-size: 12px;
+    padding: 3px 12px;
+  } */
 }
 .status-upcoming {
   background: #fffde7;
@@ -2837,7 +2848,7 @@ textarea.form-input {
 
 @media (max-width: 768px) {
   .event-detail-page {
-    padding: 10px;
+    /* padding: 10px; */
   }
 
   .page-header {
@@ -3622,13 +3633,13 @@ textarea.form-input {
 @media (max-width: 768px) {
   .discussion-section {
     padding: 10px;
-    max-width: 100vw;
+    /* max-width: 100vw; */
     box-sizing: border-box;
   }
   .discussion-content {
     max-height: 60vh;
     min-height: 200px;
-    width: 100vw;
+    /* width: 100vw; */
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -3636,7 +3647,7 @@ textarea.form-input {
   .messages-container {
     max-height: 45vh;
     min-height: 120px;
-    width: 100vw;
+    /* width: 100vw; */
     box-sizing: border-box;
     padding: 10px;
     border-radius: 0;
@@ -3649,10 +3660,10 @@ textarea.form-input {
     font-size: 18px;
   }
   .info-section {
-    padding: 10px;
+    /* padding: 10px; */
     margin-top: 16px;
     margin-bottom: 0;
-    width: 100vw;
+    width: 100%;
     box-sizing: border-box;
   }
 }
@@ -3660,13 +3671,13 @@ textarea.form-input {
   .discussion-content {
     max-height: 65vh;
     min-height: 160px;
-    width: 100vw;
+    /* width: 100vw; */
     padding: 0;
   }
   .messages-container {
     max-height: 50vh;
     min-height: 100px;
-    width: 100vw;
+    /* width: 100vw; */
     padding: 6px;
   }
   .scroll-to-bottom-btn {
@@ -3677,9 +3688,9 @@ textarea.form-input {
     font-size: 16px;
   }
   .info-section {
-    padding: 6px;
+    /* padding: 6px; */
     margin-top: 10px;
-    width: 100vw;
+    width: 100%;
   }
 }
 
@@ -3765,7 +3776,7 @@ textarea.form-input {
 
 @media (max-width: 390px) {
   .event-detail-page {
-    padding: 8px;
+    /* padding: 8px; */
   }
 
   .page-header {
@@ -3850,7 +3861,7 @@ textarea.form-input {
   }
 
   .info-section {
-    padding: 8px;
+    /* padding: 8px; */
     margin-top: 10px;
   }
 

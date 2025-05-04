@@ -396,7 +396,15 @@ body {
 .page-content {
   flex: 1;
   padding: 1rem;
+  padding-top: 30px;
   overflow-y: auto;
+
+  @media (max-width: 768px) {
+    padding: 10px;
+    padding-top: 25px;
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 /* Mobile styles */
