@@ -109,10 +109,10 @@
         <span class="mobile-nav-text">Thêm</span>
       </button>
       
-      <button class="mobile-nav-item menu-btn" @click="toggleSidebar">
+      <!-- <button class="mobile-nav-item menu-btn" @click="toggleSidebar">
         <span class="mobile-nav-icon">☰</span>
         <span class="mobile-nav-text">Menu</span>
-      </button>
+      </button> -->
     </div>
     
     <!-- Move backdrop outside sidebar but still within parent component -->

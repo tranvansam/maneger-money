@@ -8,16 +8,20 @@
     <div v-if="event" class="event-content">
       <!-- Header section -->
       <div class="page-header">
-        <button @click="goBack" class="back-button">
+        <div class="title-header">
+          <button @click="goBack" class="back-button">
           <span class="back-icon">←</span>
           Quay lại
         </button>
         <h1 class="event-title">{{ event.name }}</h1>
+        </div>
         <div class="event-status-label-top" :class="getEventStatusClass(event)">
           {{ getEventStatus(event) }}
         </div>
-        <button v-if="getEventStatus(event) !== 'Đã kết thúc' && user?.uid === event.createdBy?.uid" class="end-event-btn" @click="showEndEventModal = true">Kết thúc sự kiện</button>
-        <button v-if="getEventStatus(event) !== 'Đã kết thúc'" class="pay-btn" @click="openPaymentModal">Thanh toán tất cả</button>
+        <div class="action-header">
+          <button v-if="getEventStatus(event) !== 'Đã kết thúc' && user?.uid === event.createdBy?.uid" class="end-event-btn" @click="showEndEventModal = true">Kết thúc sự kiện</button>
+          <button v-if="getEventStatus(event) !== 'Đã kết thúc'" class="pay-btn" @click="openPaymentModal">Thanh toán tất cả</button>
+        </div>
       </div>
 
       <!-- Tabs Section -->
@@ -43,10 +47,10 @@
           <h2>Danh sách thu chi</h2>
           <div class="action-buttons">
             <button @click="openTransactionModal('expense')" class="action-btn expense-btn">
-              + Thêm chi tiêu
+              + Chi
             </button>
             <button @click="openTransactionModal('income')" class="action-btn income-btn">
-              + Thêm khoản thu
+              + Thu
             </button>
           </div>
         </div>
@@ -148,54 +152,71 @@
 
       <!-- Plans Section -->
       <div v-if="activeTab === 'plans'" class="plans-section">
-        <div class="section-header">
+        <div class="section-header plans-section-header">
           <div class="section-title">
-            <h2>Danh sách kế hoạch</h2>
+            <div>
+              <h2>Danh sách kế hoạch</h2>
             <div class="total-amount">
               Tổng chi tiêu dự kiến: {{ formatCurrency(totalEstimatedAmount) }}
             </div>
+            </div>
+            <button class="action-btn sort-btn" @click="sortPlansByStartTime" title="Sắp xếp theo thời gian bắt đầu">
+              <i class="fas fa-sort-amount-up"></i>
+            </button>
+           
           </div>
           <button @click="openPlanModal" class="action-btn plan-btn">
-            + Thêm kế hoạch
+            +
           </button>
         </div>
 
+        <div class="plan-filter-bar">
+          <input v-model="searchText" class="plan-search-input" placeholder="Tìm kiếm kế hoạch..." />
+          <select v-model="planStatusFilter" class="plan-status-dropdown">
+            <option value="all">Tất cả</option>
+            <option value="completed">Đã hoàn thành</option>
+            <option value="incomplete">Chưa hoàn thành</option>
+          </select>
+        </div>
         <div class="plans-list">
           <draggable
-            v-model="sortedPlans"
+            :list="filteredPlans"
             item-key="id"
             @end="handleDragEnd"
             handle=".drag-handle"
           >
             <template #item="{element: plan}">
               <div class="plan-card" :class="{ 'completed': plan.isCompleted }">
-                <div class="drag-handle">
-                  <i class="fas fa-grip-vertical"></i>
+                <div v-if="plan.isCompleted" class="completed-ribbon">Đã hoàn thành</div>
+                <div class="plan-toolbar">
+                  <div class="drag-handle">
+                    <i class="fas fa-grip-vertical"></i>
+                  </div>
+                  <div class="plan-toolbar-actions">
+                    <button v-if="canEditPlan(plan) && !plan.isCompleted" @click="editPlan(plan)" class="action-icon edit" title="Chỉnh sửa">✏️</button>
+                    <button v-if="canEditPlan(plan) && !plan.isCompleted" @click="confirmDeletePlan(plan)" class="action-icon delete" title="Xóa">🗑️</button>
+                    <label class="completion-checkbox" :title="plan.isCompleted ? 'Đã hoàn thành' : 'Chưa hoàn thành'">
+                      <input type="checkbox" :checked="plan.isCompleted" @change="togglePlanCompletion(plan)" />
+                      <span class="checkmark"></span>
+                    </label>
+                  </div>
                 </div>
                 <div class="plan-content">
                   <div class="plan-main">
                     <div class="plan-info">
                       <div class="plan-header">
                         <div class="plan-title-row">
-                          <label class="completion-checkbox">
-                            <input 
-                              type="checkbox" 
-                              :checked="plan.isCompleted"
-                              @change="togglePlanCompletion(plan)"
-                            />
-                            <span class="checkmark"></span>
-                          </label>
                           <h3 class="plan-title">{{ plan.title }}</h3>
-                          <span v-if="plan.isCompleted" class="completed-badge">Đã hoàn thành</span>
+                          <!-- <span v-if="plan.isCompleted" class="completed-badge">Đã hoàn thành</span> -->
                         </div>
                         <div class="plan-meta">
                           <span class="date">{{ formatDateTime(plan.startTime) }} - {{ formatDateTime(plan.endTime) }}</span>
                           <span class="creator" @click.stop="navigateToProfile(plan.createdBy.uid)">
-                            {{ plan.createdBy.displayName || plan.createdBy.email }}
+                            Người tạo: {{ plan.createdBy.displayName || plan.createdBy.email }}
                           </span>
                         </div>
                       </div>
-                      <p class="plan-description">{{ plan.description || 'Không có mô tả' }}</p>
+                      <p class="plan-description">Nội dung: {{ plan.description || 'Không có mô tả' }}</p>
                       <div class="plan-details">
                         <div class="detail-item">
                           <span class="label">Dự kiến chi tiêu:</span>
@@ -221,29 +242,12 @@
                       </div>
                     </div>
                   </div>
-                  
-                  <div v-if="canEditPlan(plan)" class="plan-actions">
-                    <button 
-                      @click="editPlan(plan)"
-                      class="action-icon edit"
-                      title="Chỉnh sửa"
-                    >
-                      ✏️
-                    </button>
-                    <button 
-                      @click="confirmDeletePlan(plan)"
-                      class="action-icon delete"
-                      title="Xóa"
-                    >
-                      🗑️
-                    </button>
-                  </div>
                 </div>
               </div>
             </template>
           </draggable>
 
-          <div v-if="sortedPlans.length === 0" class="no-plans">
+          <div v-if="plans.length === 0" class="no-plans">
             Chưa có kế hoạch nào
           </div>
         </div>
@@ -275,7 +279,7 @@
           </div>
 
           <div class="statistics-details">
-            <div v-for="plan in sortedPlans" :key="plan.id" class="plan-statistics-card">
+            <div v-for="plan in plans" :key="plan.id" class="plan-statistics-card">
               <h4>{{ plan.title }}</h4>
               <div class="statistics-grid">
                 <div class="stat-item">
@@ -458,12 +462,11 @@
               <label for="amount">Số tiền</label>
               <input
                 id="amount"
-                v-model="transactionForm.amount"
-                type="number"
-                required
-                min="0"
+                type="text"
+                v-model="formattedTransactionAmount"
                 placeholder="Nhập số tiền"
                 class="form-input"
+                @input="onTransactionAmountInput"
               />
             </div>
 
@@ -498,7 +501,7 @@
                 class="form-input"
               >
                 <option value="other">Khác</option>
-                <option v-for="plan in sortedPlans" :key="plan.id" :value="plan.id">
+                <option v-for="plan in plans" :key="plan.id" :value="plan.id">
                   {{ plan.title }}
                 </option>
               </select>
@@ -782,12 +785,23 @@
           <div class="payment-list">
             <div v-for="(member, idx) in event.participants" :key="member.uid" class="payment-row">
               <span class="member-name">{{ member.displayName || member.email }}</span>
-              <input type="number" min="0" class="payment-input" v-model.number="paymentSplits[idx].amount" @input="handleCustomAmount(idx)" />
+              <div class="payment-input-container">
+                <input
+                type="text"
+                class="payment-input"
+                :value="formatInputDisplay(paymentSplits[idx].amount)"
+                @input="onPaymentInput(idx, $event)"
+                inputmode="numeric"
+                pattern="[0-9]*"
+              />
               <span class="currency">₫</span>
-              <label class="pay-for-label">Trả cho:</label>
+              </div>
+              <div>
+                <label class="pay-for-label">Trả cho:</label>
               <select v-model="paymentSplits[idx].payTo" class="pay-for-select">
                 <option v-for="p in event.participants" :key="p.uid" :value="p.uid">{{ p.displayName || p.email }}</option>
               </select>
+              </div>
             </div>
           </div>
           <div class="payment-summary">
@@ -2044,6 +2058,71 @@ watch(() => route.query.tab, (tab) => {
     activeTab.value = tab;
   }
 });
+
+const sortPlansByStartTime = () => {
+  plans.value = [...plans.value].sort((a, b) => {
+    const timeA = a.startTime.seconds ? a.startTime.seconds : new Date(a.startTime).getTime() / 1000;
+    const timeB = b.startTime.seconds ? b.startTime.seconds : new Date(b.startTime).getTime() / 1000;
+    return timeA - timeB;
+  });
+};
+
+const searchText = ref('');
+const planStatusFilter = ref('all');
+const filteredPlans = computed(() => {
+  let result = plans.value;
+  if (planStatusFilter.value === 'completed') {
+    result = result.filter(p => p.isCompleted);
+  } else if (planStatusFilter.value === 'incomplete') {
+    result = result.filter(p => !p.isCompleted);
+  }
+  if (searchText.value.trim()) {
+    const q = searchText.value.trim().toLowerCase();
+    result = result.filter(
+      p =>
+        (p.title && p.title.toLowerCase().includes(q)) ||
+        (p.description && p.description.toLowerCase().includes(q))
+    );
+  }
+  return result;
+});
+
+function formatInputDisplay(val) {
+  if (val === null || val === undefined) return '';
+  return Number(val).toLocaleString('en-US');
+}
+function onPaymentInput(idx, event) {
+  let val = event.target.value.replace(/[^\d]/g, '');
+  if (!val) val = '0';
+  paymentSplits.value[idx].amount = Number(val);
+  // Format lại value và giữ vị trí con trỏ cuối
+  const formatted = Number(val).toLocaleString('en-US');
+  event.target.value = formatted;
+  // Đặt lại con trỏ về cuối chuỗi
+  setTimeout(() => {
+    event.target.setSelectionRange(formatted.length, formatted.length);
+  }, 0);
+}
+
+// Thêm biến và hàm format số tiền cho input
+const formattedTransactionAmount = ref('');
+
+function formatCurrencyInput(value) {
+  value = value.replace(/[^0-9]/g, '');
+  if (!value) return '';
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// Khi mở modal hoặc khi amount thay đổi, đồng bộ formattedTransactionAmount
+watch(() => transactionForm.value.amount, (val) => {
+  formattedTransactionAmount.value = formatCurrencyInput(val ? val.toString() : '');
+});
+
+function onTransactionAmountInput(e) {
+  const raw = e.target.value.replace(/[^0-9]/g, '');
+  transactionForm.value.amount = raw;
+  formattedTransactionAmount.value = formatCurrencyInput(raw);
+}
 </script>
 
 <style scoped>
@@ -2087,8 +2166,22 @@ watch(() => route.query.tab, (tab) => {
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   position: relative;
+  justify-content: space-between;
 }
-
+.title-header{
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.action-header{
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  @media (max-width: 768px) {
+    gap: 20px;
+    flex: 1;
+  }
+}
 .back-button {
   display: flex;
   align-items: center;
@@ -2111,7 +2204,9 @@ watch(() => route.query.tab, (tab) => {
 .back-icon {
   font-size: 20px;
 }
-
+.event-content{
+  max-width: calc(100vw - 20px);
+}
 .event-title {
   font-size: 24px;
   color: #333;
@@ -2308,6 +2403,7 @@ watch(() => route.query.tab, (tab) => {
   font-size: 20px;
   color: #333;
   margin: 0;
+  width: 100%;
 }
 
 .action-buttons {
@@ -2705,7 +2801,7 @@ textarea.form-input {
   min-width: 120px;
   text-align: center;
   transition: all 0.2s;
-  background-color: #ccc;
+  background-color: #4CAF50;
 }
 
 .submit-btn.active {
@@ -2720,6 +2816,7 @@ textarea.form-input {
 .submit-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+  background-color: #ccc;
 }
 
 @media (max-width: 768px) {
@@ -2727,7 +2824,22 @@ textarea.form-input {
     padding: 0;
     align-items: flex-end;
   }
-
+  .action-btn.plan-btn {
+    width: 30px;  
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .action-btn.sort-btn {
+    width: 30px;  
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #ccc;
+    border-radius: 50%;
+  }
   .modal-content {
     height: 95vh;
     max-height: none;
@@ -2736,7 +2848,12 @@ textarea.form-input {
     display: flex;
     flex-direction: column;
   }
-
+  .payment-input-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 4px;
+  }
   .modal-header {
     padding: 16px 20px;
   }
@@ -2864,7 +2981,8 @@ textarea.form-input {
     overflow-x: auto;
     padding-bottom: 5px;
     margin: 0 -10px;
-    padding: 0 10px;
+    padding: 0 6px;
+    padding-bottom: 10px !important;
   }
 
   .tab-btn {
@@ -2918,15 +3036,19 @@ textarea.form-input {
     top: 10px;
     right: 10px;
   }
+  .section-header h2{
+    font-size: 18px;
+  }
 
   .action-buttons {
-    flex-direction: column;
     gap: 8px;
     width: 100%;
+    display: flex;
+    justify-content: end;
   }
 
   .action-btn {
-    width: 100%;
+    width: 70px;
   }
 
   .filter-bar {
@@ -2978,8 +3100,8 @@ textarea.form-input {
   }
 
   .modal-content {
-    margin: 10px;
     max-height: calc(100vh - 20px);
+    border-radius: 20px 20px 0 0 !important;
   }
 
   .form-group {
@@ -3078,6 +3200,9 @@ textarea.form-input {
   font-size: 20px;
   color: #333;
   margin: 0;
+  @media (max-width: 768px) {
+    font-size: 18px;
+  }
 }
 
 .total-amount {
@@ -3102,183 +3227,257 @@ textarea.form-input {
 
 .plan-card {
   position: relative;
-  padding: 20px;
-  border-radius: 12px;
-  background: #fff;
-  border: 1px solid #eee;
-  transition: all 0.3s ease;
-  display: flex;
-  gap: 15px;
-}
-
-.plan-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.drag-handle {
-  display: flex;
-  align-items: center;
-  cursor: move;
-  color: #999;
-  padding: 0 5px;
-}
-
-.plan-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+  padding: 20px 22px 18px 22px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1.5px solid #e0e0e0;
+  box-shadow: 0 4px 24px rgba(60,60,60,0.16);
+  transition: box-shadow 0.2s, border 0.2s;
+  min-width: 260px;
+  width: 100%;
+  max-width: unset;
+  margin: 0;
 }
-
-.plan-header {
+.plan-card:hover {
+  box-shadow: 0 8px 32px rgba(60,60,60,0.22);
+  border-color: #b2dfdb;
+}
+.drag-handle {
+  position: absolute;
+  left: 14px;
+  top: 16px;
+  color: #bdbdbd;
+  font-size: 20px;
+  cursor: grab;
+  z-index: 2;
+}
+.plan-actions {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+.action-icon {
+  background: #f5f5f5;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 18px;
+  color: #757575;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  @media (max-width: 768px) {
+    font-size: 13px;
+  }
+}
+.action-icon.edit:hover {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+.action-icon.delete:hover {
+  background: #ffebee;
+  color: #d32f2f;
+}
+.plan-content {
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
-.plan-title-row {
+.plan-main {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
 }
-
-.plan-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-  margin: 0;
-  flex: 1;
-}
-
-.plan-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  color: #666;
-  flex-wrap: wrap;
-}
-
-.plan-description {
-  color: #666;
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 8px 0;
-}
-
-.plan-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-
-.detail-item {
+.plan-header {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
-.detail-item .label {
-  font-size: 12px;
-  color: #666;
-}
-
-.detail-item .value {
-  font-size: 15px;
-  font-weight: 600;
-  color: #2E7D32;
-}
-
-.plan-actions {
+.plan-title-row {
   display: flex;
-  gap: 8px;
-  margin-left: auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
 }
-
-.action-icon {
-  padding: 8px;
-  border-radius: 6px;
-  background: #f5f5f5;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.action-icon:hover {
-  background: #eeeeee;
-}
-
-.plan-card.completed {
-  background-color: #f8fdf9;
-  border-color: #4CAF50;
-}
-
-.completed-badge {
-  font-size: 12px;
-  padding: 4px 8px;
-  background-color: rgba(76, 175, 80, 0.1);
-  color: #2E7D32;
-  border-radius: 12px;
-  font-weight: 500;
-  border: 1px solid rgba(76, 175, 80, 0.3);
-}
-
 .completion-checkbox {
+  margin: 0 0 0 8px;
   position: relative;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
 .completion-checkbox input {
-  position: absolute;
   opacity: 0;
-  cursor: pointer;
-  height: 0;
-  width: 0;
-}
-
-.checkmark {
+  width: 100%;
+  height: 100%;
   position: absolute;
-  top: 0;
   left: 0;
-  height: 20px;
-  width: 20px;
-  background-color: #fff;
-  border: 2px solid #ddd;
-  border-radius: 4px;
-  transition: all 0.2s;
+  top: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 2;
 }
-
-.completion-checkbox:hover input ~ .checkmark {
-  border-color: #4CAF50;
+.checkmark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #bdbdbd;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border 0.2s, background 0.2s;
+  box-sizing: border-box;
+  z-index: 1;
 }
-
+.completion-checkbox:hover .checkmark {
+  border-color: #388e3c;
+}
 .completion-checkbox input:checked ~ .checkmark {
-  background-color: #4CAF50;
-  border-color: #4CAF50;
+  background: #43a047;
+  border-color: #388e3c;
 }
-
 .checkmark:after {
-  content: "";
-  position: absolute;
+  content: '';
   display: none;
-  left: 6px;
-  top: 2px;
-  width: 5px;
-  height: 10px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
+  width: 8px;
+  height: 14px;
+  border: solid #fff;
+  border-width: 0 3px 3px 0;
+  border-radius: 1px;
   transform: rotate(45deg);
+  position: absolute;
+  left: 7px;
+  top: 2px;
 }
-
 .completion-checkbox input:checked ~ .checkmark:after {
   display: block;
+}
+@media (max-width: 600px) {
+  .completion-checkbox, .checkmark {
+    width: 18px;
+    height: 18px;
+  }
+  .checkmark:after {
+    width: 6px;
+    height: 10px;
+    left: 5px;
+    top: 1px;
+    border-width: 0 2px 2px 0;
+  }
+}
+.plan-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #222;
+  margin: 0;
+  flex: 1;
+  letter-spacing: 0.2px;
+}
+.completed-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  background: #e8f5e9;
+  color: #388e3c;
+  border-radius: 10px;
+  font-weight: 600;
+  border: 1px solid #a5d6a7;
+  margin-left: 6px;
+}
+.plan-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #757575;
+  flex-wrap: wrap;
+}
+.plan-description {
+  color: #616161;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 6px 0 0 0;
+  font-style: italic;
+}
+.plan-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f7fafc;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 8px;
+}
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.detail-item .label {
+  color: #888;
+  min-width: 110px;
+}
+.detail-item .value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #2E7D32;
+  font-family: monospace;
+}
+.detail-item.assignees {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+}
+.assignees-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.all-members {
+  color: #757575;
+  font-style: italic;
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .plans-list {
+    gap: 10px !important;
+  }
+  .plan-card {
+    min-width: unset;
+    max-width: unset;
+    width: 100%;
+    margin: 0;
+    padding: 10px 6px 10px 10px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+  }
+  .plan-title {
+    font-size: 15px;
+  }
+  .plan-details {
+    padding: 6px 6px;
+  }
+  .plan-meta {
+    font-size: 12px;
+  }
+  .drag-handle {
+    left: 4px;
+    top: 8px;
+    font-size: 22px;
+    padding: 8px 0;
+  }
 }
 
 .statistics-section {
@@ -3636,6 +3835,15 @@ textarea.form-input {
     /* max-width: 100vw; */
     box-sizing: border-box;
   }
+  .plans-section-header {
+    align-items: start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .plans-section-header .section-title {
+    align-items: start;
+    width: 100%;
+  }
   .discussion-content {
     max-height: 60vh;
     min-height: 200px;
@@ -3645,8 +3853,8 @@ textarea.form-input {
     padding: 0;
   }
   .messages-container {
-    max-height: 45vh;
-    min-height: 120px;
+    max-height: 40vh;
+    min-height: 50px;
     /* width: 100vw; */
     box-sizing: border-box;
     padding: 10px;
@@ -3676,7 +3884,7 @@ textarea.form-input {
   }
   .messages-container {
     max-height: 50vh;
-    min-height: 100px;
+    min-height: 40px;
     /* width: 100vw; */
     padding: 6px;
   }
@@ -3774,11 +3982,13 @@ textarea.form-input {
   text-align: right;
 }
 
-@media (max-width: 390px) {
+@media (max-width: 700px) {
   .event-detail-page {
     /* padding: 8px; */
   }
-
+  .action-header{
+    width: 100%;
+  }
   .page-header {
     padding: 12px;
     margin-bottom: 15px;
@@ -3813,7 +4023,7 @@ textarea.form-input {
 
   .discussion-section {
     padding: 8px;
-    height: calc(100vh - 200px);
+    height: calc(100vh - 330px);
   }
 
   .discussion-content {
@@ -3976,9 +4186,17 @@ textarea.form-input {
   padding: 10px 22px;
   font-size: 15px;
   font-weight: 600;
-  margin-left: 16px;
+  /* margin-left: 16px; */
   cursor: pointer;
   transition: background 0.2s;
+  @media (max-width: 768px) {
+    display: flex;
+    font-size: 13px;
+    padding: 8px 10px;
+    width: 100%;
+    flex: 1;
+    justify-content: center;
+  }
 }
 .pay-btn:hover {
   background: #388e3c;
@@ -3999,6 +4217,7 @@ textarea.form-input {
   background: #f8f9fa;
   border-radius: 8px;
   padding: 10px 12px;
+  flex-wrap: wrap;
 }
 .member-name {
   min-width: 120px;
@@ -4217,8 +4436,8 @@ textarea.form-input {
 
 .notification-dot {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 3px;
+  left: -3px;
   width: 10px;
   height: 10px;
   background-color: #f44336;
@@ -4235,9 +4454,16 @@ textarea.form-input {
   padding: 10px 22px;
   font-size: 15px;
   font-weight: 600;
-  margin-left: 16px;
+  /* margin-left: 16px; */
   cursor: pointer;
   transition: background 0.2s;
+  @media (max-width: 768px) {
+    font-size: 13px;
+    padding: 8px 10px;
+    width: 100%;
+    flex: 1;
+  }
+
 }
 .end-event-btn:hover {
   background: #b71c1c;
@@ -4517,5 +4743,160 @@ textarea.form-input {
   font-size: 13px;
   font-weight: 400;
   margin-right: 2px;
+}
+
+.sort-btn {
+  background: #f5f5f5;
+  color: #1976d2;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s, color 0.2s;
+}
+.sort-btn:hover {
+  background: #e3f2fd;
+  color: #0d47a1;
+}
+.sort-btn i {
+  font-size: 16px;
+}
+
+.plan-card.completed {
+  background: #e8f5e9 !important;
+  position: relative;
+  overflow: hidden;
+}
+.completed-ribbon {
+  position: absolute;
+  top: 50%;
+  left: -30%;
+  width: 160%;
+  text-align: center;
+  transform: translateY(-50%) rotate(-15deg);
+  background: #388e3c;
+  color: #fff;
+  font-weight: 800;
+  font-size: 22px;
+  opacity: 0.25;
+  padding: 18px 0;
+  z-index: 1;
+  letter-spacing: 2px;
+  border-radius: 0;
+  box-shadow: none;
+  pointer-events: none;
+  user-select: none;
+}
+.plan-card.completed > *:not(.completed-ribbon) {
+  position: relative;
+  z-index: 2;
+}
+@media (max-width: 600px) {
+  .completed-ribbon {
+    font-size: 15px;
+    padding: 10px 0;
+  }
+  .drag-handle {
+    top: 6px;
+    left: 6px;
+    font-size: 18px;
+    padding: 2px 4px;
+  }
+}
+
+.plan-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.plan-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.drag-handle {
+  position: static;
+  top: unset;
+  left: unset;
+  color: #bdbdbd;
+  font-size: 18px;
+  cursor: grab;
+  z-index: 3;
+  padding: 2px 4px;
+  background: transparent;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+.completion-checkbox {
+  margin: 0 0 0 8px;
+  position: relative;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.plan-filter-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.plan-search-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 15px;
+}
+.plan-status-dropdown {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #bdbdbd;
+  background: #f5f5f5;
+  color: #333;
+  font-size: 15px;
+  min-width: 120px;
+  outline: none;
+  transition: border 0.2s;
+}
+.plan-status-dropdown:focus {
+  border-color: #388e3c;
+}
+@media (max-width: 600px) {
+  .plan-filter-bar {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .plan-search-input {
+    font-size: 14px;
+    padding: 7px 10px;
+  }
+  .plan-status-dropdown {
+    min-width: 90px;
+    font-size: 13px;
+    padding: 7px 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .payment-input {
+    width: 100% !important;
+    min-width: 0;
+    font-size: 15px;
+    box-sizing: border-box;
+  }
 }
 </style> 
