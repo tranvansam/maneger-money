@@ -12,4 +12,6 @@ export async function saveFcmTokenForUser(userId: string) {
   } catch (err) {
     console.error("Không thể lấy FCM token:", err);
   }
-} 
+}
+
+navigator.serviceWorker.register('/firebase-messaging-sw.js')
