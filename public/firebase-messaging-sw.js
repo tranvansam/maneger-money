@@ -1,5 +1,5 @@
-importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
 // Firebase configuration
 const firebaseConfig = {
@@ -19,53 +19,24 @@ firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
 // Handle background messages
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message:', payload);
-
-  try {
-    const notificationTitle = payload.notification.title;
-    const notificationOptions = {
-      body: payload.notification.body,
-      icon: '/icon.png', // Path to your app icon
-      badge: '/badge.png', // Path to your notification badge
-      tag: payload.data?.eventId || 'default', // Use event ID as tag if available
-      data: payload.data,
-      actions: [
-        {
-          action: 'view',
-          title: 'View Event'
-        },
-        {
-          action: 'dismiss',
-          title: 'Dismiss'
-        }
-      ]
-    };
-
+messaging.onBackgroundMessage(function(payload) {
+  const notificationTitle = payload.notification.title || 'Thông báo mới';
+  const notificationOptions = {
+    body: payload.notification.body,
+    icon: '/icon.png',
+    data: payload.data
+  };
+  // Chỉ show notification nếu trình duyệt hỗ trợ
+  if (typeof self.registration.showNotification === 'function') {
     self.registration.showNotification(notificationTitle, notificationOptions);
-  } catch (error) {
-    console.error('[firebase-messaging-sw.js] Error showing notification:', error);
   }
 });
 
 // Handle notification click events
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  const eventId = event.notification.data?.eventId;
-  let url = 'https://maneger-money.vercel.app/';
-  if (eventId) url = `https://maneger-money.vercel.app/events/${eventId}`;
-  event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(clientList => {
-      for (const client of clientList) {
-        if (client.url.includes(url) && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
-    })
-  );
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(clients.openWindow(url));
 });
 
 // Handle service worker installation
