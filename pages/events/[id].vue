@@ -828,6 +828,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '~/composables/useAuth';
 import Avatar from '~/components/Avatar.vue';
 import draggable from 'vuedraggable';
+import { pushNotification } from '~/composables/useNotifications'
+import { collection, query, where, getDocs } from 'firebase/firestore'
 
 definePageMeta({
   middleware: 'auth'
@@ -977,6 +979,19 @@ const handleSubmitTransaction = async () => {
     });
     // KHÔNG gán event.value.transactions ở đây, chỉ close modal
     closeTransactionModal();
+
+    const participants = event.value.participants || []
+    for (const member of participants) {
+      if (member.uid !== user.value.uid) {
+        await pushNotification({
+          recipientId: member.uid,
+          type: transactionForm.value.id ? 'edit_expense' : 'add_expense',
+          content: `${user.value.displayName} vừa ${transactionForm.value.id ? 'chỉnh sửa' : 'thêm'} khoản ${transactionForm.value.type === 'income' ? 'thu' : 'chi'} mới`,
+          eventId: event.value.id,
+          relatedId: transactionForm.value.id || transactionData.id
+        })
+      }
+    }
   } catch (error) {
     console.error('Error handling transaction:', error);
     alert('Có lỗi xảy ra khi lưu dữ liệu. Vui lòng thử lại.');
@@ -1142,6 +1157,9 @@ onMounted(() => {
   if (activeTab.value === 'discussion') {
     unreadMessagesCount.value = 0;
   }
+  if (event.value && user.value) {
+    markNotificationsAsRead(event.value.id, user.value.uid);
+  }
 });
 onUnmounted(() => {
   if (unsubscribePlans) unsubscribePlans();
@@ -1281,6 +1299,19 @@ const handleSubmitPlan = async () => {
     closePlanModal();
     
     alert(planForm.value.id ? 'Cập nhật kế hoạch thành công!' : 'Thêm kế hoạch mới thành công!');
+
+    const planParticipants = event.value.participants || []
+    for (const member of planParticipants) {
+      if (member.uid !== user.value.uid) {
+        await pushNotification({
+          recipientId: member.uid,
+          type: planForm.value.id ? 'edit_plan' : 'add_plan',
+          content: `${user.value.displayName} vừa ${planForm.value.id ? 'chỉnh sửa' : 'thêm'} kế hoạch "${planForm.value.title}"`,
+          eventId: event.value.id,
+          relatedId: planForm.value.id || planData.id
+        })
+      }
+    }
   } catch (error) {
     console.error('Error handling plan:', error);
     alert('Có lỗi xảy ra khi lưu dữ liệu. Vui lòng thử lại.');
@@ -1452,6 +1483,18 @@ const sendMessage = async () => {
         container.scrollTop = container.scrollHeight;
       }
     });
+
+    const msgParticipants = event.value.participants || []
+    for (const member of msgParticipants) {
+      if (member.uid !== user.value.uid) {
+        await pushNotification({
+          recipientId: member.uid,
+          type: 'discussion',
+          content: `${user.value.displayName} vừa gửi một tin nhắn mới trong sự kiện "${event.value.name}"`,
+          eventId: event.value.id
+        })
+      }
+    }
   } catch (error) {
     console.error('Error sending message:', error);
     alert('Có lỗi xảy ra khi gửi tin nhắn. Vui lòng thử lại.');
@@ -2122,6 +2165,19 @@ function onTransactionAmountInput(e) {
   const raw = e.target.value.replace(/[^0-9]/g, '');
   transactionForm.value.amount = raw;
   formattedTransactionAmount.value = formatCurrencyInput(raw);
+}
+
+async function markNotificationsAsRead(eventId, userId) {
+  const q = query(
+    collection(db, 'notifications'),
+    where('eventId', '==', eventId),
+    where('recipientId', '==', userId),
+    where('isRead', '==', false)
+  );
+  const querySnapshot = await getDocs(q);
+  for (const notiDoc of querySnapshot.docs) {
+    await updateDoc(doc(db, 'notifications', notiDoc.id), { isRead: true });
+  }
 }
 </script>
 

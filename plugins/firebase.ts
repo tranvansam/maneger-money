@@ -4,6 +4,7 @@ import { getAnalytics } from "firebase/analytics";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, connectAuthEmulator, updateProfile, type Auth, type User, type UserInfo } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 // Your web app's Firebase configuration from .env via runtimeConfig
 const firebaseConfig = {
@@ -183,3 +184,4 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     });
   }
 }); 
+export const messaging = getMessaging(initializeApp(firebaseConfig));

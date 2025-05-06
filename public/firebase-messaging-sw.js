@@ -3,12 +3,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-comp
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "XXXXXXXXXXXX",
-  appId: "1:XXXXXXXXXXXX:web:XXXXXXXXXXXXXXXXXXXXXXXX"
+  apiKey: "AIzaSyAmr3SW4uIE1hyxEb9CF2PcDqP7sYV-wrw",
+  authDomain: "maneger-money.firebaseapp.com",
+  projectId: "maneger-money",
+  storageBucket: "maneger-money.appspot.com",
+  messagingSenderId: "643115939406",
+  appId: "1:643115939406:web:3bc790bd7d0c0bf62ab51f",
+  measurementId: "G-S0B086MH8W"
 };
 
 // Initialize Firebase
@@ -48,33 +49,23 @@ messaging.onBackgroundMessage((payload) => {
 });
 
 // Handle notification click events
-self.addEventListener('notificationclick', (event) => {
-  console.log('[firebase-messaging-sw.js] Notification clicked:', event);
-
-  try {
-    event.notification.close();
-
-    if (event.action === 'view' && event.notification.data?.eventId) {
-      // Open the event page when notification is clicked
-      const eventUrl = `/events/${event.notification.data.eventId}`;
-      event.waitUntil(
-        clients.matchAll({ type: 'window' }).then((clientList) => {
-          // If a window is already open, focus it and navigate
-          for (const client of clientList) {
-            if (client.url === eventUrl && 'focus' in client) {
-              return client.focus();
-            }
-          }
-          // If no window is open, open a new one
-          if (clients.openWindow) {
-            return clients.openWindow(eventUrl);
-          }
-        })
-      );
-    }
-  } catch (error) {
-    console.error('[firebase-messaging-sw.js] Error handling notification click:', error);
-  }
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  const eventId = event.notification.data?.eventId;
+  let url = 'https://maneger-money.vercel.app/';
+  if (eventId) url = `https://maneger-money.vercel.app/events/${eventId}`;
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url.includes(url) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
+    })
+  );
 });
 
 // Handle service worker installation

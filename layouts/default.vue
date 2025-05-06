@@ -17,27 +17,30 @@
         <h1 class="app-title">Manager Money</h1>
         
         <!-- User info area -->
-        <div class="user-area">
-          <div class="user-menu" v-if="user">
-            <div class="user-info" @click="toggleUserMenu">
-              <Avatar 
-                :email="user.email"
-                :name="user.displayName"
-                size="small"
-                class="user-avatar"
-              />
-              <span class="user-name">{{ user.displayName || user.email }}</span>
-              <i class="fas fa-chevron-down menu-arrow" :class="{ 'rotated': showUserMenu }"></i>
-            </div>
-            <div v-show="showUserMenu" class="menu-items">
-              <NuxtLink :to="`/profile/${user.uid}`" class="menu-item" @click="showUserMenu = false">
-                <i class="fas fa-user"></i>
-                <span>Hồ sơ của tôi</span>
-              </NuxtLink>
-              <button @click="handleLogout" class="menu-item">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Đăng xuất</span>
-              </button>
+        <div class="header-right">
+          <NotificationBell />
+          <div class="user-area">
+            <div class="user-menu" v-if="user">
+              <div class="user-info" @click="toggleUserMenu">
+                <Avatar 
+                  :email="user.email"
+                  :name="user.displayName"
+                  size="small"
+                  class="user-avatar"
+                />
+                <span class="user-name">{{ user.displayName || user.email }}</span>
+                <i class="fas fa-chevron-down menu-arrow" :class="{ 'rotated': showUserMenu }"></i>
+              </div>
+              <div v-show="showUserMenu" class="menu-items">
+                <NuxtLink :to="`/profile/${user.uid}`" class="menu-item" @click="showUserMenu = false">
+                  <i class="fas fa-user"></i>
+                  <span>Hồ sơ của tôi</span>
+                </NuxtLink>
+                <button @click="handleLogout" class="menu-item">
+                  <i class="fas fa-sign-out-alt"></i>
+                  <span>Đăng xuất</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -71,6 +74,10 @@
         </div>
       </div>
     </div>
+    <div v-if="showPrompt" class="notification-permission-banner">
+      <span>Hãy bật thông báo để không bỏ lỡ các cập nhật mới!</span>
+      <button @click="requestPermission">Bật thông báo</button>
+    </div>
   </div>
 </template>
 
@@ -82,6 +89,7 @@ import { useAuth } from '~/composables/useAuth';
 import { useRoute } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '~/plugins/firebase';
+import NotificationBell from '~/components/NotificationBell.vue'
 
 const route = useRoute();
 const { user, isAuthenticated, logout, refreshUser } = useAuth();
@@ -91,6 +99,7 @@ const showUserMenu = ref(false);
 const isMobile = ref(false);
 const authUnsubscribe = ref(null);
 const showAppLoading = ref(true);
+const showPrompt = ref(false);
 
 // Setup direct auth state listener
 const setupAuthListener = () => {
@@ -157,6 +166,14 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth <= 768;
 };
 
+function requestPermission() {
+  Notification.requestPermission().then(permission => {
+    if (permission === 'granted') {
+      showPrompt.value = false;
+    }
+  });
+}
+
 onMounted(() => {
   console.log('Default layout mounted');
   console.log('Initial auth state:', isAuthenticated.value ? 'Authenticated' : 'Not authenticated');
@@ -187,6 +204,10 @@ onMounted(() => {
   setTimeout(() => {
     showAppLoading.value = false;
   }, 1500);
+
+  if (Notification.permission !== 'granted') {
+    showPrompt.value = true;
+  }
 });
 
 onUnmounted(() => {
@@ -294,6 +315,49 @@ body {
   font-size: 1.25rem;
   color: #333;
   flex: 1;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.notification-bell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: #f0f2f5;
+  border-radius: 50%;
+  margin-right: 4px;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.notification-bell:hover {
+  background: #e4e6eb;
+}
+
+.bell-btn {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.icon-bell::before {
+  content: "";
+  display: block;
+  width: 22px;
+  height: 22px;
+  background: url('data:image/svg+xml;utf8,<svg fill="%23333" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 24c1.104 0 2-.896 2-2h-4c0 1.104.896 2 2 2zm6.364-6v-5c0-3.07-1.639-5.64-4.364-6.32V6c0-.828-.672-1.5-1.5-1.5S11 5.172 11 6v.68C8.275 7.36 6.636 9.93 6.636 13v5l-1.636 1.5V21h16v-1.5L18.364 18zM18 19H6v-.5l1.636-1.5V13c0-2.757 1.794-5 4-5s4 2.243 4 5v4.5l1.364 1.5V19z"/></svg>') no-repeat center/contain;
 }
 
 .user-area {
@@ -503,5 +567,27 @@ body {
 
 .has-mobile-nav {
   padding-bottom: 60px;
+}
+
+.notification-permission-banner {
+  background: #fffde7;
+  color: #fbc02d;
+  padding: 12px 24px;
+  text-align: center;
+  font-size: 15px;
+  border-bottom: 1px solid #ffe082;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+.notification-permission-banner button {
+  background: #fbc02d;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font-weight: bold;
 }
 </style> 
