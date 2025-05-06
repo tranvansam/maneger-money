@@ -74,9 +74,15 @@
         </div>
       </div>
     </div>
-    <div v-if="showPrompt" class="notification-permission-banner">
-      <span>Hãy bật thông báo để không bỏ lỡ các cập nhật mới!</span>
-      <button @click="requestPermission">Bật thông báo</button>
+    <div v-if="showPrompt" class="notification-permission-modal-overlay">
+      <div class="notification-permission-modal">
+        <div class="modal-title">Bật thông báo</div>
+        <div class="modal-desc">Hãy bật thông báo để không bỏ lỡ các cập nhật mới!</div>
+        <div class="modal-actions">
+          <button class="modal-btn accept" @click="requestPermission">Bật thông báo</button>
+          <button class="modal-btn close" @click="showPrompt = false">Đóng</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -167,11 +173,15 @@ const checkMobile = () => {
 };
 
 function requestPermission() {
-  Notification.requestPermission().then(permission => {
-    if (permission === 'granted') {
-      showPrompt.value = false;
-    }
-  });
+  if (typeof Notification !== 'undefined') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        showPrompt.value = false;
+      }
+    });
+  } else {
+    alert('Trình duyệt của bạn không hỗ trợ thông báo (Notification).');
+  }
 }
 
 onMounted(() => {
@@ -205,7 +215,7 @@ onMounted(() => {
     showAppLoading.value = false;
   }, 1500);
 
-  if (Notification.permission !== 'granted') {
+  if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
     showPrompt.value = true;
   }
 });
@@ -569,25 +579,80 @@ body {
   padding-bottom: 60px;
 }
 
-.notification-permission-banner {
-  background: #fffde7;
-  color: #fbc02d;
-  padding: 12px 24px;
-  text-align: center;
-  font-size: 15px;
-  border-bottom: 1px solid #ffe082;
+.notification-permission-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.25);
+  z-index: 2000;
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
 }
-.notification-permission-banner button {
-  background: #fbc02d;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 16px;
-  cursor: pointer;
+.notification-permission-modal {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(60,60,60,0.18);
+  padding: 28px 28px 20px 28px;
+  min-width: 320px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  animation: fadeInModal 0.2s;
+}
+@keyframes fadeInModal {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.modal-title {
+  font-size: 20px;
   font-weight: bold;
+  color: #1976d2;
+  margin-bottom: 4px;
+}
+.modal-desc {
+  font-size: 15px;
+  color: #444;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+}
+.modal-btn {
+  padding: 10px 22px;
+  border-radius: 8px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.modal-btn.accept {
+  background: #1976d2;
+  color: #fff;
+}
+.modal-btn.accept:hover {
+  background: #1256a3;
+}
+.modal-btn.close {
+  background: #f5f5f5;
+  color: #333;
+}
+.modal-btn.close:hover {
+  background: #e0e0e0;
+}
+@media (max-width: 600px) {
+  .notification-permission-modal {
+    min-width: 90vw;
+    padding: 18px 8px 14px 8px;
+  }
+  .modal-title { font-size: 17px; }
+  .modal-desc { font-size: 14px; }
+  .modal-btn { font-size: 14px; padding: 8px 12px; }
 }
 </style> 
