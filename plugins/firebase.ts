@@ -5,6 +5,8 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { toast } from 'vue3-toastify';
+import 'vue3-toastify/dist/index.css';
 
 // Your web app's Firebase configuration from .env via runtimeConfig
 const firebaseConfig = {
@@ -185,3 +187,46 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   }
 }); 
 export const messaging = getMessaging(initializeApp(firebaseConfig));
+
+// Lắng nghe notification khi app ở foreground
+if (typeof window !== 'undefined') {
+  try {
+    const messaging = getMessaging();
+    onMessage(messaging, (payload) => {
+      const title = payload.notification?.title || 'Thông báo mới';
+      const body = payload.notification?.body || '';
+      
+      // Show toast notification
+      toast.info(`${title}: ${body}`, {
+        autoClose: 5000,
+        position: 'top-right',
+        closeOnClick: true,
+        closeButton: true,
+        style: { marginBottom: '16px', borderRadius: '10px', boxShadow: '0 2px 12px rgba(60,60,60,0.12)' }
+      });
+
+      // Show browser notification if supported
+      if (Notification.permission === 'granted') {
+        const notification = new Notification(title, {
+          body: body,
+          icon: '/icon.png',
+          badge: '/icon.png',
+          tag: 'manager-money',
+          requireInteraction: false,
+          silent: false
+        });
+
+        notification.onclick = function() {
+          window.focus();
+          notification.close();
+          // Navigate to the relevant page if URL is provided in payload
+          if (payload.data?.url) {
+            window.location.href = payload.data.url;
+          }
+        };
+      }
+    });
+  } catch (e) {
+    console.error('Notification error:', e);
+  }
+}

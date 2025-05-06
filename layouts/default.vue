@@ -96,6 +96,9 @@ import { useRoute } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '~/plugins/firebase';
 import NotificationBell from '~/components/NotificationBell.vue'
+import { getMessaging, getToken } from 'firebase/messaging';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '~/plugins/firebase';
 
 const route = useRoute();
 const { user, isAuthenticated, logout, refreshUser } = useAuth();
@@ -173,15 +176,52 @@ const checkMobile = () => {
 };
 
 function requestPermission() {
-  if (typeof Notification !== 'undefined') {
-    Notification.requestPermission().then(permission => {
-      if (permission === 'granted') {
-        showPrompt.value = false;
-      }
-    });
-  } else {
+  if (typeof Notification === 'undefined') {
     alert('Trình duyệt của bạn không hỗ trợ thông báo (Notification).');
+    return;
   }
+
+  if (Notification.permission === 'granted') {
+    showPrompt.value = false;
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    alert('Bạn đã từ chối thông báo. Để nhận thông báo, vui lòng cập nhật cài đặt thông báo trong trình duyệt của bạn.');
+    showPrompt.value = false;
+    return;
+  }
+
+  Notification.requestPermission().then(permission => {
+    if (permission === 'granted') {
+      showPrompt.value = false;
+      // Get FCM token after permission is granted
+      if (typeof window !== 'undefined') {
+        try {
+          const messaging = getMessaging();
+          getToken(messaging, {
+            vapidKey: 'YOUR_VAPID_KEY' // Replace with your VAPID key
+          }).then((token) => {
+            if (token) {
+              // Save token to Firestore
+              const userRef = doc(db, 'users', user.value.uid);
+              updateDoc(userRef, {
+                fcmToken: token,
+                notificationEnabled: true
+              });
+            }
+          }).catch((err) => {
+            console.error('Error getting FCM token:', err);
+          });
+        } catch (e) {
+          console.error('FCM error:', e);
+        }
+      }
+    } else {
+      showPrompt.value = false;
+      alert('Bạn cần cho phép thông báo để nhận các cập nhật quan trọng từ ứng dụng.');
+    }
+  });
 }
 
 onMounted(() => {

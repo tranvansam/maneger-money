@@ -264,6 +264,7 @@ onMounted(() => {
   font-size: 15px;
   background: #fff;
   color: #222;
+  width: 100% !important;
 }
 
 .noti-item.unread {
