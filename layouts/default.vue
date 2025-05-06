@@ -97,7 +97,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '~/plugins/firebase';
 import NotificationBell from '~/components/NotificationBell.vue'
 import { getMessaging, getToken } from 'firebase/messaging';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '~/plugins/firebase';
 
 const route = useRoute();
@@ -138,6 +138,7 @@ const setupAuthListener = () => {
 const handleLogout = async () => {
   try {
     showUserMenu.value = false;
+    await removeFCMToken();
     await logout();
     navigateTo('/login');
   } catch (error) {
@@ -175,6 +176,57 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth <= 768;
 };
 
+async function saveFCMToken(token) {
+  if (!user.value) return;
+  
+  try {
+    // Lưu token vào collection fcm_tokens
+    const tokenRef = doc(db, 'fcm_tokens', user.value.uid);
+    await setDoc(tokenRef, {
+      token: token,
+      userId: user.value.uid,
+      deviceInfo: {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language
+      },
+      lastUsed: new Date(),
+      createdAt: new Date(),
+      isActive: true
+    });
+
+    // Cập nhật trạng thái notification trong user document
+    const userRef = doc(db, 'users', user.value.uid);
+    await updateDoc(userRef, {
+      notificationEnabled: true,
+      lastTokenUpdate: new Date()
+    });
+
+    console.log('FCM token saved successfully');
+  } catch (error) {
+    console.error('Error saving FCM token:', error);
+    throw error;
+  }
+}
+
+async function getFCMToken() {
+  if (typeof window === 'undefined' || !user.value) return;
+  
+  try {
+    const messaging = getMessaging();
+    const token = await getToken(messaging, {
+      vapidKey: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'
+    });
+    
+    if (token) {
+      console.log('FCM Token received:', token);
+      await saveFCMToken(token);
+    }
+  } catch (err) {
+    console.error('Error getting FCM token:', err);
+  }
+}
+
 function requestPermission() {
   if (typeof Notification === 'undefined') {
     alert('Trình duyệt của bạn không hỗ trợ thông báo (Notification).');
@@ -183,6 +235,7 @@ function requestPermission() {
 
   if (Notification.permission === 'granted') {
     showPrompt.value = false;
+    getFCMToken();
     return;
   }
 
@@ -192,36 +245,30 @@ function requestPermission() {
     return;
   }
 
-  Notification.requestPermission().then(permission => {
+  Notification.requestPermission().then(async (permission) => {
     if (permission === 'granted') {
       showPrompt.value = false;
-      // Get FCM token after permission is granted
-      if (typeof window !== 'undefined') {
-        try {
-          const messaging = getMessaging();
-          getToken(messaging, {
-            vapidKey: 'YOUR_VAPID_KEY' // Replace with your VAPID key
-          }).then((token) => {
-            if (token) {
-              // Save token to Firestore
-              const userRef = doc(db, 'users', user.value.uid);
-              updateDoc(userRef, {
-                fcmToken: token,
-                notificationEnabled: true
-              });
-            }
-          }).catch((err) => {
-            console.error('Error getting FCM token:', err);
-          });
-        } catch (e) {
-          console.error('FCM error:', e);
-        }
-      }
+      await getFCMToken();
     } else {
       showPrompt.value = false;
       alert('Bạn cần cho phép thông báo để nhận các cập nhật quan trọng từ ứng dụng.');
     }
   });
+}
+
+// Thêm hàm để xóa token khi logout
+async function removeFCMToken() {
+  if (!user.value) return;
+  
+  try {
+    const tokenRef = doc(db, 'fcm_tokens', user.value.uid);
+    await updateDoc(tokenRef, {
+      isActive: false,
+      lastUsed: new Date()
+    });
+  } catch (err) {
+    console.error('Error removing FCM token:', err);
+  }
 }
 
 onMounted(() => {
@@ -241,6 +288,8 @@ onMounted(() => {
     refreshUser().then(() => {
       console.log('User data refreshed on layout mount:', user.value?.displayName);
       console.log('App title should now be "Manager Money"');
+      // Get FCM token if user is authenticated
+      getFCMToken();
     });
   } else {
     console.log('User not authenticated on layout mount, no app title should be displayed');
@@ -255,8 +304,13 @@ onMounted(() => {
     showAppLoading.value = false;
   }, 1500);
 
-  if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
-    showPrompt.value = true;
+  // Check notification permission
+  if (typeof Notification !== 'undefined') {
+    if (Notification.permission === 'granted') {
+      getFCMToken();
+    } else if (Notification.permission !== 'denied') {
+      showPrompt.value = true;
+    }
   }
 });
 

@@ -1,7 +1,7 @@
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// Firebase configuration
+// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAmr3SW4uIE1hyxEb9CF2PcDqP7sYV-wrw",
   authDomain: "maneger-money.firebaseapp.com",
@@ -20,33 +20,64 @@ const messaging = firebase.messaging();
 
 // Handle background messages
 messaging.onBackgroundMessage(function(payload) {
-  const notificationTitle = payload.notification.title || 'Thông báo mới';
+  console.log('Received background message:', payload);
+
+  const notificationTitle = payload.notification?.title || 'Thông báo mới';
   const notificationOptions = {
-    body: payload.notification.body,
+    body: payload.notification?.body || '',
     icon: '/icon.png',
-    data: payload.data
+    badge: '/icon.png',
+    tag: 'manager-money',
+    data: payload.data || {},
+    requireInteraction: false,
+    silent: false
   };
-  // Chỉ show notification nếu trình duyệt hỗ trợ
+
+  // Show notification
   if (typeof self.registration.showNotification === 'function') {
-    self.registration.showNotification(notificationTitle, notificationOptions);
+    self.registration.showNotification(notificationTitle, notificationOptions)
+      .catch(error => {
+        console.error('Error showing notification:', error);
+      });
   }
 });
 
 // Handle notification click events
 self.addEventListener('notificationclick', function(event) {
+  console.log('Notification click received:', event);
+
   event.notification.close();
-  const url = event.notification.data?.url || '/';
-  event.waitUntil(clients.openWindow(url));
+
+  // This looks to see if the current is already open and focuses if it is
+  event.waitUntil(
+    clients.matchAll({
+      type: "window"
+    }).then(function(clientList) {
+      // If a window tab is already open, focus it
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i];
+        if (client.url === '/' && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      
+      // If no window tab is open, open a new one
+      if (clients.openWindow) {
+        const url = event.notification.data?.url || '/';
+        return clients.openWindow(url);
+      }
+    })
+  );
 });
 
 // Handle service worker installation
-self.addEventListener('install', (event) => {
-  console.log('[firebase-messaging-sw.js] Service Worker installed');
+self.addEventListener('install', function(event) {
+  console.log('Service Worker installed');
   self.skipWaiting();
 });
 
 // Handle service worker activation
-self.addEventListener('activate', (event) => {
-  console.log('[firebase-messaging-sw.js] Service Worker activated');
+self.addEventListener('activate', function(event) {
+  console.log('Service Worker activated');
   event.waitUntil(clients.claim());
 }); 
