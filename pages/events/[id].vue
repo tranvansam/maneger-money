@@ -58,6 +58,10 @@
               v-if="tab.key === 'paymentHistory' && totalPendingPayments > 0"
               class="notification-dot"
             ></span>
+            <span
+              v-if="tab.key === 'transactions' && (unpaidIncomeCount > 0 || unpaidExpenseCount > 0)"
+              class="notification-dot"
+            ></span>
           </button>
         </div>
       </div>
@@ -91,6 +95,8 @@
               :class="['filter-btn', { active: currentFilter === filter }]"
             >
               {{ filterLabels[filter] }}
+              <span v-if="filter === 'income' && unpaidIncomeCount > 0" class="unpaid-count">({{ unpaidIncomeCount }})</span>
+              <span v-if="filter === 'expense' && unpaidExpenseCount > 0" class="unpaid-count">({{ unpaidExpenseCount }})</span>
             </button>
           </div>
           <div class="summary">
@@ -129,6 +135,7 @@
                     />
                     <div class="transaction-meta">
                       <h3 class="transaction-description">
+                        <span v-if="transaction.type === 'expense' && !isTransactionFullyPaid(transaction)" class="unpaid-dot">•</span>
                         {{ transaction.description }}
                       </h3>
                       <div class="transaction-details">
@@ -729,15 +736,13 @@
             <!-- Bulk actions -->
             <div v-if="isSelectingMultiple" class="bulk-actions">
               <div class="bulk-info">
-                <span>Đã chọn {{ selectedSplits.size }} khoản</span>
+                <span>Đã chọn {{ selectedSplits.size }} khoản ({{ formatCurrency(selectedSplitsTotalAmount) }})</span>
                 <button @click="clearSelection" class="clear-selection-btn">
                   <i class="fas fa-times"></i> Bỏ chọn
                 </button>
               </div>
               <button @click="sendBulkPaidRequests" class="bulk-action-btn">
-                <i class="fas fa-paper-plane"></i> Gửi yêu cầu đã trả ({{
-                  selectedSplits.size
-                }})
+                <i class="fas fa-paper-plane"></i> Gửi yêu cầu đã trả ({{ selectedSplits.size }})
               </button>
             </div>
 
@@ -750,16 +755,16 @@
               <div class="checkbox-container">
                 <input
                   type="checkbox"
-                  :id="`split-${split.uid}-${split.payTo}`"
-                  :checked="selectedSplits.has(`${split.uid}-${split.payTo}`)"
-                  @change="toggleSplitSelection(`${split.uid}-${split.payTo}`)"
+                  :id="`split-${split.uid}-${split.payTo}${split.transactionId ? '-' + split.transactionId : ''}`"
+                  :checked="selectedSplits.has(split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`)"
+                  @change="toggleSplitSelection(split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`)"
                   :disabled="
                     split.status === 'paid' && split.confirmedByReceiver
                   "
                   class="split-checkbox"
                 />
                 <label
-                  :for="`split-${split.uid}-${split.payTo}`"
+                  :for="`split-${split.uid}-${split.payTo}${split.transactionId ? '-' + split.transactionId : ''}`"
                   class="checkbox-label"
                 ></label>
               </div>
@@ -784,6 +789,10 @@
                 <span v-else class="transaction-description">
                   Thanh toán tổng sự kiện
                 </span>
+                <!-- Ngày tạo -->
+                <span class="payment-date">
+                  {{ formatPaymentDate(split.createdAt) }}
+                </span>
                 <!-- Số tiền -->
                 <span class="amount">{{ formatCurrency(split.amount) }}</span>
               </div>
@@ -800,11 +809,11 @@
                 <template v-if="split.status !== 'paid'">
                   <button
                     class="check-btn"
-                    :disabled="splitLoading[`${split.uid}-${split.payTo}`]"
+                    :disabled="splitLoading[split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`]"
                     @click="sendPaidRequest(split)"
                   >
                     {{
-                      splitLoading[`${split.uid}-${split.payTo}`]
+                      splitLoading[split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`]
                         ? "Đang gửi..."
                         : "Gửi yêu cầu đã trả"
                     }}
@@ -909,7 +918,7 @@
                         class="fas fa-check"
                         v-if="selectedReceiveStatusFilter === 'pending'"
                       ></i>
-                      <span>Chờ xác nhận</span>
+                      <span>Chưa nhận</span>
                     </div>
                   </div>
                 </div>
@@ -924,7 +933,7 @@
                   }}</span>
                 </div>
                 <div class="stat-item">
-                  <span class="stat-label">Chờ xác nhận:</span>
+                  <span class="stat-label">Chưa nhận:</span>
                   <span class="stat-value unpaid">{{
                     formatCurrency(filteredReceiveStats.pendingAmount)
                   }}</span>
@@ -945,13 +954,13 @@
                   :disabled="filteredSplitsToReceive.filter(split => split.status === 'paid' && !split.confirmedByReceiver).length === 0"
                 >
                   <i :class="selectedReceiveSplits.size > 0 ? 'fas fa-check-square' : 'far fa-square'"></i> 
-                  {{ selectedReceiveSplits.size > 0 ? 'Bỏ chọn tất cả' : 'Chọn tất cả chờ xác nhận' }}
+                  {{ selectedReceiveSplits.size > 0 ? 'Bỏ chọn tất cả' : 'Chọn tất cả có thể xác nhận' }}
                 </button>
               </div>
             <!-- Bulk actions cho tab "Tôi nhận" -->
             <div v-if="isSelectingMultipleReceive" class="bulk-actions">
               <div class="bulk-info">
-                <span>Đã chọn {{ selectedReceiveSplits.size }} khoản</span>
+                <span>Đã chọn {{ selectedReceiveSplits.size }} khoản ({{ formatCurrency(selectedReceiveSplitsTotalAmount) }})</span>
                 <button
                   @click="clearReceiveSelection"
                   class="clear-selection-btn"
@@ -960,9 +969,7 @@
                 </button>
               </div>
               <button @click="confirmBulkReceived" class="bulk-action-btn">
-                <i class="fas fa-check-circle"></i> Xác nhận ({{
-                  selectedReceiveSplits.size
-                }})
+                <i class="fas fa-check-circle"></i> Xác nhận ({{ selectedReceiveSplits.size }})
               </button>
             </div>
 
@@ -975,12 +982,12 @@
               <div class="checkbox-container">
                 <input
                   type="checkbox"
-                  :id="`receive-split-${split.uid}-${split.payTo}`"
+                  :id="`receive-split-${split.uid}-${split.payTo}${split.transactionId ? '-' + split.transactionId : ''}`"
                   :checked="
-                    selectedReceiveSplits.has(`${split.uid}-${split.payTo}`)
+                    selectedReceiveSplits.has(split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`)
                   "
                   @change="
-                    toggleReceiveSplitSelection(`${split.uid}-${split.payTo}`)
+                    toggleReceiveSplitSelection(split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`)
                   "
                   :disabled="
                     split.status !== 'paid' || split.confirmedByReceiver
@@ -988,7 +995,7 @@
                   class="split-checkbox"
                 />
                 <label
-                  :for="`receive-split-${split.uid}-${split.payTo}`"
+                  :for="`receive-split-${split.uid}-${split.payTo}${split.transactionId ? '-' + split.transactionId : ''}`"
                   class="checkbox-label"
                 ></label>
               </div>
@@ -1008,6 +1015,9 @@
                   }}</span>
                   <span v-else>Thanh toán tổng sự kiện</span>
                 </div>
+                <div class="receive-date">
+                  {{ formatPaymentDate(split.createdAt) }}
+                </div>
                 <div class="receive-amount">
                   {{ formatCurrency(split.amount) }}
                 </div>
@@ -1026,11 +1036,11 @@
                   <button
                     v-if="!split.confirmedByReceiver"
                     class="check-btn"
-                    :disabled="splitLoading[`${split.uid}-${split.payTo}`]"
+                    :disabled="splitLoading[split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`]"
                     @click="() => { console.log('Button clicked for split:', split); confirmReceived(split); }"
                   >
                     {{
-                      splitLoading[`${split.uid}-${split.payTo}`]
+                      splitLoading[split.transactionId ? `${split.uid}-${split.payTo}-${split.transactionId}` : `${split.uid}-${split.payTo}`]
                         ? "Đang xác nhận..."
                         : "Xác nhận đã nhận tiền"
                     }}
@@ -1597,6 +1607,24 @@ const filterLabels = {
   expense: "Chi tiêu",
 };
 
+// Đếm số lượng khoản thu chưa chia tiền
+const unpaidIncomeCount = computed(() => {
+  if (!event.value?.transactions) return 0;
+  return event.value.transactions.filter(transaction => 
+    transaction.type === 'income' && 
+    (!transaction.paymentSplits || transaction.paymentSplits.length === 0)
+  ).length;
+});
+
+// Đếm số lượng khoản chi chưa chia tiền
+const unpaidExpenseCount = computed(() => {
+  if (!event.value?.transactions) return 0;
+  return event.value.transactions.filter(transaction => 
+    transaction.type === 'expense' && 
+    (!transaction.paymentSplits || transaction.paymentSplits.length === 0)
+  ).length;
+});
+
 const today = computed(() => {
   return new Date().toISOString().split("T")[0];
 });
@@ -1622,7 +1650,24 @@ const filteredTransactions = computed(() => {
         currentFilter.value === "all" ||
         transaction.type === currentFilter.value
     )
-    .sort((a, b) => b.date.seconds - a.date.seconds);
+    .sort((a, b) => {
+      // Ưu tiên 1: Khoản chưa chia tiền lên đầu
+      const aHasPaymentSplits = a.paymentSplits && a.paymentSplits.length > 0;
+      const bHasPaymentSplits = b.paymentSplits && b.paymentSplits.length > 0;
+      
+      if (!aHasPaymentSplits && bHasPaymentSplits) return -1;
+      if (aHasPaymentSplits && !bHasPaymentSplits) return 1;
+      
+      // Ưu tiên 2: Khoản chưa thanh toán lên đầu (trong cùng trạng thái chia tiền)
+      const aIsFullyPaid = isTransactionFullyPaid(a);
+      const bIsFullyPaid = isTransactionFullyPaid(b);
+      
+      if (!aIsFullyPaid && bIsFullyPaid) return -1;
+      if (aIsFullyPaid && !bIsFullyPaid) return 1;
+      
+      // Ưu tiên 3: Sắp xếp theo thời gian (mới nhất lên đầu)
+      return b.date.seconds - a.date.seconds;
+    });
 });
 
 const canEditTransaction = (transaction) => {
@@ -1779,6 +1824,29 @@ const formatDate = (date) => {
   return new Date(date.seconds * 1000).toLocaleDateString("vi-VN");
 };
 
+// Format payment date
+const formatPaymentDate = (date) => {
+  if (!date) return "Chưa xác định";
+  const d = new Date(date.seconds * 1000);
+  const now = new Date();
+  const diffTime = Math.abs(now - d);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 1) {
+    return "Hôm qua";
+  } else if (diffDays === 0) {
+    return "Hôm nay";
+  } else if (diffDays < 7) {
+    return `${diffDays} ngày trước`;
+  } else {
+    return d.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
+  }
+};
+
 // Format currency
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat("vi-VN", {
@@ -1799,6 +1867,22 @@ const getTransactionPaymentDetails = (transaction) => {
   );
   
   return transactionSplits;
+};
+
+// Kiểm tra xem transaction đã được thanh toán đầy đủ chưa
+const isTransactionFullyPaid = (transaction) => {
+  if (transaction.type !== 'expense') return true;
+  
+  // Nếu chưa có paymentSplits thì chưa thanh toán
+  if (!transaction.paymentSplits || transaction.paymentSplits.length === 0) {
+    return false;
+  }
+  
+  // Kiểm tra xem tất cả splits có status = 'paid' và confirmedByReceiver = true không
+  const splits = getTransactionPaymentDetails(transaction);
+  if (splits.length === 0) return false;
+  
+  return splits.every(split => split.status === 'paid' && split.confirmedByReceiver);
 };
 
 // Go back function
@@ -2754,7 +2838,8 @@ const findSplitIndexInOriginalArray = (split) => {
     (s) =>
       s.uid === split.uid &&
       s.payTo === split.payTo &&
-      s.transactionId === split.transactionId
+      s.transactionId === split.transactionId &&
+      s.amount === split.amount
   );
 };
 
@@ -2778,7 +2863,9 @@ const sendPaidRequest = async (split, isBulkMode = false) => {
     return;
   }
 
-  const loadingKey = `${split.uid}-${split.payTo}`;
+  const loadingKey = split.transactionId ? 
+    `${split.uid}-${split.payTo}-${split.transactionId}` : 
+    `${split.uid}-${split.payTo}`;
   if (!isBulkMode) {
     splitLoading.value[loadingKey] = true;
   }
@@ -2859,7 +2946,9 @@ const confirmReceived = async (split, isBulkMode = false) => {
     return;
   }
 
-  const loadingKey = `${split.uid}-${split.payTo}`;
+  const loadingKey = split.transactionId ? 
+    `${split.uid}-${split.payTo}-${split.transactionId}` : 
+    `${split.uid}-${split.payTo}`;
   if (!isBulkMode) {
     splitLoading.value[loadingKey] = true;
   }
@@ -2932,6 +3021,60 @@ const selectedReceiveSplits = ref(new Set());
 const isSelectingMultiple = ref(false);
 const isSelectingMultipleReceive = ref(false);
 
+// Tính tổng số tiền của các splits được chọn trong tab "Tôi nhận"
+const selectedReceiveSplitsTotalAmount = computed(() => {
+  if (!selectedReceiveSplits.value.size) return 0;
+  
+  let total = 0;
+  selectedReceiveSplits.value.forEach((splitKey) => {
+    const parts = splitKey.split("-");
+    const uid = parts[0];
+    const payTo = parts[1];
+    const transactionId = parts.length > 2 ? parts[2] : null;
+    
+    // Tìm split tương ứng trong filteredSplitsToReceive
+    const split = filteredSplitsToReceive.value.find(s => {
+      if (transactionId) {
+        return s.uid === uid && s.payTo === payTo && s.transactionId === transactionId;
+      }
+      return s.uid === uid && s.payTo === payTo;
+    });
+    
+    if (split) {
+      total += split.amount;
+    }
+  });
+  
+  return total;
+});
+
+// Tính tổng số tiền của các splits được chọn trong tab "Tôi cần trả"
+const selectedSplitsTotalAmount = computed(() => {
+  if (!selectedSplits.value.size) return 0;
+  
+  let total = 0;
+  selectedSplits.value.forEach((splitKey) => {
+    const parts = splitKey.split("-");
+    const uid = parts[0];
+    const payTo = parts[1];
+    const transactionId = parts.length > 2 ? parts[2] : null;
+    
+    // Tìm split tương ứng trong filteredSplitsToPay
+    const split = filteredSplitsToPay.value.find(s => {
+      if (transactionId) {
+        return s.uid === uid && s.payTo === payTo && s.transactionId === transactionId;
+      }
+      return s.uid === uid && s.payTo === payTo;
+    });
+    
+    if (split) {
+      total += split.amount;
+    }
+  });
+  
+  return total;
+});
+
 // Danh sách người tham gia để filter (loại bỏ chính mình)
 const availablePayToOptions = computed(() => {
   if (!event.value?.participants) return [];
@@ -2992,7 +3135,22 @@ const filteredSplitsToPay = computed(() => {
     }
   }
 
-  return filtered;
+  // Sắp xếp: chưa trả/chờ xác nhận lên đầu
+  return filtered.sort((a, b) => {
+    // Kiểm tra trạng thái thanh toán
+    const aIsPaid = a.status === "paid" && a.confirmedByReceiver;
+    const bIsPaid = b.status === "paid" && b.confirmedByReceiver;
+    
+    // Nếu a chưa trả và b đã trả thì a lên đầu
+    if (!aIsPaid && bIsPaid) return -1;
+    // Nếu a đã trả và b chưa trả thì b lên đầu
+    if (aIsPaid && !bIsPaid) return 1;
+    
+    // Nếu cùng trạng thái thì sắp xếp theo thời gian tạo (mới nhất lên đầu)
+    const aTime = a.createdAt?.seconds || 0;
+    const bTime = b.createdAt?.seconds || 0;
+    return bTime - aTime;
+  });
 });
 
 // Danh sách đã lọc theo filter cho tab "Tôi nhận"
@@ -3022,14 +3180,31 @@ const filteredSplitsToReceive = computed(() => {
         (split) => split.status === "paid" && split.confirmedByReceiver
       );
     } else if (selectedReceiveStatusFilter.value === "pending") {
-      // Chờ xác nhận: status = 'paid' nhưng chưa xác nhận
+      // Chưa nhận: status = 'paid' nhưng chưa xác nhận HOẶC status != 'paid'
       filtered = filtered.filter(
-        (split) => split.status === "paid" && !split.confirmedByReceiver
+        (split) => 
+          split.status !== "paid" ||
+          (split.status === "paid" && !split.confirmedByReceiver)
       );
     }
   }
 
-  return filtered;
+  // Sắp xếp: chưa nhận/chờ xác nhận lên đầu
+  return filtered.sort((a, b) => {
+    // Kiểm tra trạng thái nhận tiền
+    const aIsReceived = a.status === "paid" && a.confirmedByReceiver;
+    const bIsReceived = b.status === "paid" && b.confirmedByReceiver;
+    
+    // Nếu a chưa nhận và b đã nhận thì a lên đầu
+    if (!aIsReceived && bIsReceived) return -1;
+    // Nếu a đã nhận và b chưa nhận thì b lên đầu
+    if (aIsReceived && !bIsReceived) return 1;
+    
+    // Nếu cùng trạng thái thì sắp xếp theo thời gian tạo (mới nhất lên đầu)
+    const aTime = a.createdAt?.seconds || 0;
+    const bTime = b.createdAt?.seconds || 0;
+    return bTime - aTime;
+  });
 });
 
 // Tính tổng tiền đã trả và chưa trả theo filter
@@ -3064,6 +3239,9 @@ const filteredReceiveStats = computed(() => {
       receivedAmount += split.amount;
     } else if (split.status === "paid" && !split.confirmedByReceiver) {
       pendingAmount += split.amount;
+    } else if (split.status !== "paid") {
+      // Các khoản chưa thanh toán cũng tính vào pending
+      pendingAmount += split.amount;
     }
   });
 
@@ -3088,7 +3266,7 @@ const pendingPaymentsToPay = computed(() => {
 // Cập nhật pendingPaymentsToReceive để sử dụng filtered list
 const pendingPaymentsToReceive = computed(() => {
   if (!user.value || !event.value?.paymentSplits?.splits) return 0;
-  // Đếm các khoản trong danh sách đã lọc và có trạng thái chưa thanh toán HOẶC chờ xác nhận
+  // Đếm các khoản trong danh sách đã lọc và có trạng thái chưa thanh toán HOẶC chưa xác nhận
   return filteredSplitsToReceive.value.filter(
     (split) =>
       split.status !== "paid" ||
@@ -3267,7 +3445,7 @@ const getReceiveStatusFilterDisplayText = () => {
     case "received":
       return "Đã nhận";
     case "pending":
-      return "Chờ xác nhận";
+      return "Chưa nhận";
     default:
       return "Tất cả";
   }
@@ -3297,9 +3475,12 @@ const selectAllVisibleSplits = () => {
   );
   
   // Kiểm tra xem tất cả đã được chọn chưa
-  const allSelected = selectableSplits.every(split => 
-    selectedSplits.value.has(`${split.uid}-${split.payTo}`)
-  );
+  const allSelected = selectableSplits.every(split => {
+    const splitKey = split.transactionId ? 
+      `${split.uid}-${split.payTo}-${split.transactionId}` : 
+      `${split.uid}-${split.payTo}`;
+    return selectedSplits.value.has(splitKey);
+  });
   
   if (allSelected) {
     // Nếu tất cả đã chọn thì bỏ chọn tất cả
@@ -3308,7 +3489,10 @@ const selectAllVisibleSplits = () => {
     // Nếu chưa chọn tất cả thì chọn tất cả
     selectedSplits.value.clear();
     selectableSplits.forEach((split) => {
-      selectedSplits.value.add(`${split.uid}-${split.payTo}`);
+      const splitKey = split.transactionId ? 
+        `${split.uid}-${split.payTo}-${split.transactionId}` : 
+        `${split.uid}-${split.payTo}`;
+      selectedSplits.value.add(splitKey);
     });
   }
   
@@ -3355,9 +3539,12 @@ const selectAllVisibleReceiveSplits = () => {
   }
   
   // Kiểm tra xem tất cả đã được chọn chưa
-  const allSelected = selectableSplits.every(split => 
-    selectedReceiveSplits.value.has(`${split.uid}-${split.payTo}`)
-  );
+  const allSelected = selectableSplits.every(split => {
+    const splitKey = split.transactionId ? 
+      `${split.uid}-${split.payTo}-${split.transactionId}` : 
+      `${split.uid}-${split.payTo}`;
+    return selectedReceiveSplits.value.has(splitKey);
+  });
   
   console.log('All selected:', allSelected);
   console.log('Current selectedReceiveSplits:', selectedReceiveSplits.value);
@@ -3371,7 +3558,10 @@ const selectAllVisibleReceiveSplits = () => {
     console.log('Selecting all selectable splits');
     selectedReceiveSplits.value.clear();
     selectableSplits.forEach((split) => {
-      const splitKey = `${split.uid}-${split.payTo}`;
+      // Tạo unique key bao gồm cả transactionId để tránh conflict
+      const splitKey = split.transactionId ? 
+        `${split.uid}-${split.payTo}-${split.transactionId}` : 
+        `${split.uid}-${split.payTo}`;
       console.log('Adding to selection:', splitKey, 'Status:', split.status, 'Confirmed:', split.confirmedByReceiver);
       selectedReceiveSplits.value.add(splitKey);
     });
@@ -3397,9 +3587,18 @@ const sendBulkPaidRequests = async () => {
 
   const splitsToProcess = Array.from(selectedSplits.value)
     .map((splitKey) => {
-      const [uid, payTo] = splitKey.split("-");
+      const parts = splitKey.split("-");
+      const uid = parts[0];
+      const payTo = parts[1];
+      const transactionId = parts.length > 2 ? parts[2] : null;
+      
       return filteredSplitsToPay.value.find(
-        (split) => split.uid === uid && split.payTo === payTo
+        (split) => {
+          if (transactionId) {
+            return split.uid === uid && split.payTo === payTo && split.transactionId === transactionId;
+          }
+          return split.uid === uid && split.payTo === payTo;
+        }
       );
     })
     .filter(
@@ -3415,7 +3614,9 @@ const sendBulkPaidRequests = async () => {
   try {
     // Hiển thị loading cho tất cả items được chọn
     splitsToProcess.forEach((split) => {
-      const loadingKey = `${split.uid}-${split.payTo}`;
+      const loadingKey = split.transactionId ? 
+        `${split.uid}-${split.payTo}-${split.transactionId}` : 
+        `${split.uid}-${split.payTo}`;
       splitLoading.value[loadingKey] = true;
     });
 
@@ -3435,7 +3636,9 @@ const sendBulkPaidRequests = async () => {
   } finally {
     // Clear loading cho tất cả items
     splitsToProcess.forEach((split) => {
-      const loadingKey = `${split.uid}-${split.payTo}`;
+      const loadingKey = split.transactionId ? 
+        `${split.uid}-${split.payTo}-${split.transactionId}` : 
+        `${split.uid}-${split.payTo}`;
       splitLoading.value[loadingKey] = false;
     });
   }
@@ -3470,22 +3673,46 @@ const confirmBulkReceived = async () => {
     
     // Cập nhật từng split được chọn
     for (const splitKey of selectedSplits) {
-      const [uid, payTo] = splitKey.split("-");
+      const parts = splitKey.split("-");
+      const uid = parts[0];
+      const payTo = parts[1];
+      const transactionId = parts.length > 2 ? parts[2] : null;
       
-      // Tìm index của split trong array
-      const splitIdx = splits.findIndex(s => s.uid === uid && s.payTo === payTo);
+      // Tìm splits match với uid và payTo
+      let matchingSplits = splits.filter(s => s.uid === uid && s.payTo === payTo);
       
-      if (splitIdx !== -1) {
-        console.log('Updating split at index:', splitIdx, 'Key:', splitKey);
+      // Nếu có transactionId, filter thêm theo transactionId
+      if (transactionId) {
+        matchingSplits = matchingSplits.filter(s => s.transactionId === transactionId);
+      }
+      
+      if (matchingSplits.length > 0) {
+        // Nếu có nhiều splits match, chỉ cập nhật những split có thể xác nhận (status = 'paid' và chưa xác nhận)
+        const splitsToUpdate = matchingSplits.filter(s => 
+          s.status === 'paid' && !s.confirmedByReceiver
+        );
         
-        // Cập nhật split
-        splits[splitIdx] = {
-          ...splits[splitIdx],
-          confirmedByReceiver: true,
-          confirmedAt: Timestamp.now(),
-        };
-        
-        updatedCount++;
+        for (const splitToUpdate of splitsToUpdate) {
+          const splitIdx = splits.findIndex(s => 
+            s.uid === splitToUpdate.uid && 
+            s.payTo === splitToUpdate.payTo && 
+            s.transactionId === splitToUpdate.transactionId &&
+            s.amount === splitToUpdate.amount
+          );
+          
+          if (splitIdx !== -1) {
+            console.log('Updating split at index:', splitIdx, 'Key:', splitKey);
+            
+            // Cập nhật split
+            splits[splitIdx] = {
+              ...splits[splitIdx],
+              confirmedByReceiver: true,
+              confirmedAt: Timestamp.now(),
+            };
+            
+            updatedCount++;
+          }
+        }
       }
     }
     
@@ -4044,12 +4271,20 @@ async function markNotificationsAsRead(eventId, userId) {
   font-size: 14px;
   color: #666;
   transition: all 0.2s;
+  position: relative;
 }
 
 .filter-btn.active {
   background-color: #333;
   border-color: #333;
   color: white;
+}
+
+.unpaid-count {
+  color: #f44336;
+  font-weight: 500;
+  font-size: 12px;
+  margin-left: 4px;
 }
 
 .summary {
@@ -4153,6 +4388,13 @@ async function markNotificationsAsRead(eventId, userId) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.unpaid-dot {
+  color: #f44336;
+  font-weight: bold;
+  margin-right: 6px;
+  font-size: 18px;
 }
 
 .transaction-details {
@@ -6282,6 +6524,20 @@ textarea.form-input {
   color: #666;
   font-style: italic;
   margin-top: 4px;
+}
+
+.payment-date {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.receive-date {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+  margin-top: 2px;
 }
 
 .payment-history-row {
