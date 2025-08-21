@@ -590,6 +590,45 @@
         <div class="section-header">
           <h2>Lịch sử thanh toán</h2>
         </div>
+        
+        <!-- Thống kê tổng hợp -->
+        <div class="overall-stats-section">
+          <div class="overall-stats-grid">
+            <div class="overall-stat-item">
+              <span class="overall-stat-label negative">Trả:</span>
+              <span class="overall-stat-value negative">
+                {{ formatCurrency(overallPaymentStats.totalToPay) }}
+              </span>
+            </div>
+            <div class="overall-stat-item">
+              <span class="overall-stat-label positive">Nhận:</span>
+              <span class="overall-stat-value positive">
+                {{ formatCurrency(overallPaymentStats.totalToReceive) }}
+              </span>
+            </div>
+          </div>
+          <div class="overall-stat-summary">
+            <span 
+              :class="[
+                'overall-stat-label',
+                overallPaymentStats.isPositive ? 'positive' : 
+                overallPaymentStats.isNegative ? 'negative' : 'neutral'
+              ]"
+            >
+              {{ overallPaymentStats.isPositive ? 'Sẽ nhận' : 
+                 overallPaymentStats.isNegative ? 'Phải trả' : 'Cân bằng' }}:
+            </span>
+            <span 
+              :class="[
+                'overall-stat-value',
+                overallPaymentStats.isPositive ? 'positive' : 
+                overallPaymentStats.isNegative ? 'negative' : 'neutral'
+              ]"
+            >
+              {{ formatCurrency(Math.abs(overallPaymentStats.netAmount)) }}
+            </span>
+          </div>
+        </div>
         <div style="margin-bottom: 16px">
           <button
             :class="['tab-btn', { active: paymentTab === 'toPay' }]"
@@ -3249,6 +3288,22 @@ const filteredReceiveStats = computed(() => {
     receivedAmount,
     pendingAmount,
     totalAmount: receivedAmount + pendingAmount,
+  };
+});
+
+// Thống kê tổng hợp: Số tiền sẽ nhận - Số tiền phải trả
+const overallPaymentStats = computed(() => {
+  const totalToReceive = filteredReceiveStats.value.totalAmount;
+  const totalToPay = filteredPaymentsStats.value.totalAmount;
+  const netAmount = totalToReceive - totalToPay;
+  
+  return {
+    totalToReceive,
+    totalToPay,
+    netAmount,
+    isPositive: netAmount > 0,
+    isNegative: netAmount < 0,
+    isZero: netAmount === 0
   };
 });
 
@@ -6938,6 +6993,16 @@ textarea.form-input {
     width: 50%;
   }
   
+  .filter-btn {
+    font-size: 11px;
+    padding: 6px 8px;
+  }
+  
+  .filter-option {
+    font-size: 11px;
+    padding: 6px 8px;
+  }
+  
   .payment-stats {
     justify-content: space-around;
   }
@@ -7254,6 +7319,100 @@ textarea.form-input {
   border: 1px solid #ddd;
   font-size: 15px;
 }
+/* Thống kê tổng hợp */
+.overall-stats-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #e9ecef;
+}
+
+.overall-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .overall-stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  
+  .overall-stat-item {
+    font-size: 9px;
+    padding: 3px 4px;
+  }
+  
+  .overall-stat-summary {
+    font-size: 10px;
+    padding-top: 6px;
+  }
+  
+  .overall-stat-value {
+    font-size: 9px;
+  }
+}
+
+.overall-stat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 8px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.overall-stat-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  padding-top: 8px;
+  border-top: 1px solid #e9ecef;
+}
+
+.overall-stat-label {
+  font-weight: 500;
+}
+
+.overall-stat-label.positive {
+  color: #28a745;
+}
+
+.overall-stat-label.negative {
+  color: #dc3545;
+}
+
+.overall-stat-label.neutral {
+  color: #6c757d;
+}
+
+.overall-stat-value {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.overall-stat-value.positive {
+  color: #28a745;
+}
+
+.overall-stat-value.negative {
+  color: #dc3545;
+}
+
+.overall-stat-value.neutral {
+  color: #6c757d;
+}
+
 .plan-status-dropdown {
   padding: 8px 14px;
   border-radius: 8px;
