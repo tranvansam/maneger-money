@@ -2,43 +2,81 @@
   <div class="notification-bell">
     <button @click="toggleDropdown" class="bell-btn">
       <i class="fa-solid fa-bell bell-icon"></i>
-      <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
+      <span v-if="unreadCount > 0" class="badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
     </button>
+    
+    <!-- Overlay để đóng dropdown khi click bên ngoài -->
+    <div v-if="showDropdown" class="dropdown-overlay" @click="closeDropdown"></div>
+    
     <div v-if="showDropdown" class="dropdown">
       <div class="noti-header">
-        <span class="noti-title">Thông báo</span>
+        <div class="noti-header-content">
+          <span class="noti-title">Thông báo</span>
+          <button v-if="unreadCount > 0" @click="markAllRead" class="mark-all-read-btn">
+            <i class="fa-solid fa-check-double"></i>
+            Đánh dấu tất cả đã đọc
+          </button>
+        </div>
         <div class="noti-tabs">
           <button :class="{ active: tab === 'all' }" @click="tab = 'all'">Tất cả</button>
-          <button :class="{ active: tab === 'unread' }" @click="tab = 'unread'">Chưa đọc</button>
+          <button :class="{ active: tab === 'unread' }" @click="tab = 'unread'">
+            Chưa đọc
+            <span v-if="unreadCount > 0" class="unread-count">({{ unreadCount }})</span>
+          </button>
         </div>
       </div>
+      
       <div class="noti-list">
         <template v-if="filteredNotifications.length">
           <div v-if="newNotifications.length" class="noti-group">
-            <div class="noti-group-title">Mới</div>
+            <div class="noti-group-title">
+              <i class="fa-solid fa-clock"></i>
+              Hôm nay
+            </div>
             <div v-for="noti in newNotifications" :key="noti.id" class="noti-item" :class="{ unread: !noti.isRead }"
               @click="goToNotification(noti)">
-              <div class="noti-content">{{ noti.content }}</div>
-              <span class="noti-time">{{ formatTime(noti.createdAt) }}</span>
-              <span v-if="!noti.isRead" class="dot"></span>
+              <div class="noti-avatar">
+                <i :class="getNotificationIcon(noti.data?.type)"></i>
+              </div>
+              <div class="noti-content-wrapper">
+                <div class="noti-content">{{ noti.body || noti.content }}</div>
+                <div class="noti-meta">
+                  <span class="noti-event">{{ noti.title || noti.data?.eventName }}</span>
+                  <span class="noti-time">{{ formatTime(noti.createdAt) }}</span>
+                </div>
+              </div>
+              <div v-if="!noti.isRead" class="unread-indicator"></div>
             </div>
           </div>
+          
           <div v-if="oldNotifications.length" class="noti-group">
-            <div class="noti-group-title">Trước đó</div>
+            <div class="noti-group-title">
+              <i class="fa-solid fa-history"></i>
+              Trước đó
+            </div>
             <div v-for="noti in oldNotifications" :key="noti.id" class="noti-item" :class="{ unread: !noti.isRead }"
               @click="goToNotification(noti)">
-              <div class="noti-content">{{ noti.content }}</div>
-              <span class="noti-time">{{ formatTime(noti.createdAt) }}</span>
-              <span v-if="!noti.isRead" class="dot"></span>
+              <div class="noti-avatar">
+                <i :class="getNotificationIcon(noti.data?.type)"></i>
+              </div>
+              <div class="noti-content-wrapper">
+                <div class="noti-content">{{ noti.body || noti.content }}</div>
+                <div class="noti-meta">
+                  <span class="noti-event">{{ noti.title || noti.data?.eventName }}</span>
+                  <span class="noti-time">{{ formatTime(noti.createdAt) }}</span>
+                </div>
+              </div>
+              <div v-if="!noti.isRead" class="unread-indicator"></div>
             </div>
           </div>
         </template>
+        
         <div v-else class="empty">
           <i class="fa-regular fa-bell-slash empty-icon"></i>
-          <div>Không có thông báo</div>
+          <div class="empty-title">Không có thông báo</div>
+          <div class="empty-subtitle">Bạn sẽ nhận được thông báo khi có hoạt động mới</div>
         </div>
       </div>
-      <button v-if="unreadCount > 0" class="mark-read-btn" @click="markAllRead">Đánh dấu đã đọc</button>
     </div>
   </div>
 </template>
@@ -62,6 +100,10 @@ let lastNotiId = null
 
 function toggleDropdown() {
   showDropdown.value = !showDropdown.value
+}
+
+function closeDropdown() {
+  showDropdown.value = false
 }
 
 function formatTime(time) {
@@ -89,10 +131,31 @@ function goToNotification(noti) {
   if (!noti.isRead) {
     updateDoc(doc(db, "notifications", noti.id), { isRead: true })
   }
-  if (noti.eventId) {
-    router.push(`/events/${noti.eventId}`)
+  if (noti.data?.eventId || noti.eventId) {
+    router.push(`/events/${noti.data?.eventId || noti.eventId}`)
   }
   showDropdown.value = false
+}
+
+function getNotificationIcon(type) {
+  const icons = {
+    event_created: 'fa-solid fa-calendar-plus',
+    event_updated: 'fa-solid fa-edit',
+    event_ended: 'fa-solid fa-calendar-check',
+    transaction_added: 'fa-solid fa-plus-circle',
+    transaction_updated: 'fa-solid fa-edit',
+    plan_added: 'fa-solid fa-tasks',
+    plan_updated: 'fa-solid fa-edit',
+    message_sent: 'fa-solid fa-comment',
+    payment_request: 'fa-solid fa-money-bill-wave',
+    payment_confirmed: 'fa-solid fa-check-circle',
+    discussion: 'fa-solid fa-comment',
+    add_expense: 'fa-solid fa-plus-circle',
+    edit_expense: 'fa-solid fa-edit',
+    add_plan: 'fa-solid fa-tasks',
+    edit_plan: 'fa-solid fa-edit'
+  }
+  return icons[type] || 'fa-solid fa-bell'
 }
 
 const filteredNotifications = computed(() => {
@@ -122,21 +185,32 @@ onMounted(() => {
   )
   onSnapshot(q, (querySnapshot) => {
     const newList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-    // Detect new notification
-    if (notifications.value.length && newList.length > notifications.value.length) {
+    
+    // Detect new notification - chỉ hiển thị toast khi có notification mới
+    if (notifications.value.length > 0 && newList.length > notifications.value.length) {
       const latest = newList[0]
       if (latest.id !== lastNotiId && !latest.isRead) {
-        toast.info(latest.content, {
+        // Hiển thị toast với nội dung đúng
+        const toastContent = latest.body || latest.content || 'Bạn có thông báo mới'
+        toast.info(toastContent, {
           autoClose: 5000,
           position: 'top-right',
           closeOnClick: true,
           closeButton: true,
-          limit: 3,
-          style: { marginBottom: '16px', borderRadius: '10px', boxShadow: '0 2px 12px rgba(60,60,60,0.12)' }
+          limit: 1, // Giảm limit để tránh duplicate
+          toastId: latest.id, // Thêm toastId để tránh duplicate
+          style: { 
+            marginBottom: '16px', 
+            borderRadius: '10px', 
+            boxShadow: '0 2px 12px rgba(60,60,60,0.12)',
+            fontSize: '14px',
+            padding: '12px 16px'
+          }
         })
         lastNotiId = latest.id
       }
     }
+    
     notifications.value = newList
     unreadCount.value = notifications.value.filter(n => !n.isRead).length
   })
@@ -167,28 +241,57 @@ onMounted(() => {
 
 .badge {
   position: absolute;
-  top: 0;
-  right: 0;
-  background: red;
+  top: -2px;
+  right: -2px;
+  background: #f44336;
   color: #fff;
   border-radius: 50%;
-  padding: 2px 6px;
-  font-size: 12px;
+  min-width: 18px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.dropdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
 }
 
 .dropdown {
   position: absolute;
   right: 0;
-  top: 30px;
+  top: 50px;
   background: #fff;
-  border: 1px solid #ccc;
-  width: 350px;
+  border: none;
+  width: 380px;
   max-width: 95vw;
-  max-height: 500px;
-  overflow-y: auto;
-  z-index: 100;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(60, 60, 60, 0.18);
+  max-height: 600px;
+  overflow: hidden;
+  z-index: 1000;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 600px) {
@@ -205,121 +308,212 @@ onMounted(() => {
 }
 
 .noti-header {
-  padding: 12px 16px 0 16px;
-  border-bottom: 1px solid #eee;
+  padding: 16px 20px 12px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+  border-radius: 16px 16px 0 0;
+}
+
+.noti-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .noti-title {
-  font-weight: bold;
+  font-weight: 700;
   font-size: 18px;
+  color: #1a1a1a;
+}
+
+.mark-all-read-btn {
+  background: none;
+  border: none;
+  color: #1877f2;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mark-all-read-btn:hover {
+  background: #e7f3ff;
 }
 
 .noti-tabs {
-  float: right;
+  display: flex;
+  gap: 8px;
 }
 
 .noti-tabs button {
   background: none;
   border: none;
-  font-size: 15px;
-  color: #888;
-  margin-left: 8px;
+  font-size: 14px;
+  color: #65676b;
   cursor: pointer;
-  padding: 4px 10px;
-  border-radius: 6px;
-  transition: background 0.2s;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-weight: 500;
+  position: relative;
 }
 
-.noti-tabs button.active,
-.noti-tabs button:hover {
-  background: #f0f0f0;
-  color: #333;
+.noti-tabs button.active {
+  background: #e7f3ff;
+  color: #1877f2;
+  font-weight: 600;
+}
+
+.noti-tabs button:hover:not(.active) {
+  background: #f2f3f5;
+}
+
+.unread-count {
+  font-size: 12px;
+  color: #1877f2;
+  margin-left: 4px;
 }
 
 .noti-list {
-  padding: 0 0 8px 0;
-  overflow-y: scroll;
-  max-height: 460px;
-  min-height: 460px;
+  padding: 0;
+  overflow-y: auto;
+  max-height: 500px;
+  min-height: 200px;
 }
 
 .noti-group {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .noti-group-title {
-  font-size: 13px;
-  color: #888;
-  padding: 8px 16px 4px 16px;
+  font-size: 12px;
+  color: #65676b;
+  padding: 12px 20px 8px 20px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fafafa;
 }
 
 .noti-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 18px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
   cursor: pointer;
-  border-bottom: 1px solid #f5f5f5;
-  transition: background 0.2s;
-  font-size: 15px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s;
   background: #fff;
-  color: #222;
-  width: 100% !important;
+  position: relative;
 }
 
 .noti-item.unread {
-  background: #e3f2fd;
-  font-weight: 600;
-  border-left: 4px solid #2196f3;
-  color: #222;
+  background: #f0f8ff;
+  border-left: 4px solid #1877f2;
+}
+
+.noti-item:hover {
+  background: #f8f9fa;
+}
+
+.noti-item.unread:hover {
+  background: #e7f3ff;
+}
+
+.noti-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e7f3ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.noti-avatar i {
+  color: #1877f2;
+  font-size: 16px;
+}
+
+.noti-content-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.noti-content {
+  font-size: 14px;
+  color: #1a1a1a;
+  line-height: 1.4;
+  margin-bottom: 4px;
+  font-weight: 400;
 }
 
 .noti-item.unread .noti-content {
   font-weight: 600;
 }
 
-.noti-item:not(.unread) .noti-content {
-  font-weight: 400;
+.noti-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #65676b;
 }
 
-.noti-item:hover {
-  background: #f5faff;
-}
-
-.noti-content {
-  flex: 1;
+.noti-event {
+  font-weight: 500;
+  color: #1877f2;
 }
 
 .noti-time {
-  font-size: 12px;
-  color: #888;
-  min-width: 70px;
-  text-align: right;
+  color: #65676b;
 }
 
-.dot {
-  width: 10px;
-  height: 10px;
-  background: #2196f3;
+.unread-indicator {
+  width: 8px;
+  height: 8px;
+  background: #1877f2;
   border-radius: 50%;
-  display: inline-block;
-  margin-left: 6px;
+  flex-shrink: 0;
+  margin-top: 4px;
 }
 
 .empty {
-  padding: 40px 0 30px 0;
+  padding: 60px 20px;
   text-align: center;
-  color: #888;
+  color: #65676b;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .empty-icon {
-  font-size: 38px;
+  font-size: 48px;
   color: #bbb;
   margin-bottom: 8px;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.empty-subtitle {
+  font-size: 14px;
+  color: #65676b;
+  max-width: 200px;
+  line-height: 1.4;
 }
 
 .mark-read-btn {

@@ -6,6 +6,13 @@
   </div>
 </template>
 
+<script setup>
+import { useFcmToken } from '~/composables/useFcmToken'
+
+// Initialize FCM for push notifications
+const { initializeFcm } = useFcmToken()
+</script>
+
 <style>
 body {
   margin: 0;

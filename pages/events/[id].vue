@@ -1624,7 +1624,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "~/composables/useAuth";
 import Avatar from "~/components/Avatar.vue";
 import draggable from "vuedraggable";
-import { pushNotification } from "~/composables/useNotifications";
+  import { sendEventNotification } from "~/composables/useNotifications";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
 definePageMeta({
@@ -1817,22 +1817,25 @@ const handleSubmitTransaction = async () => {
     // KHÔNG gán event.value.transactions ở đây, chỉ close modal
     closeTransactionModal();
 
-    const participants = event.value.participants || [];
-    for (const member of participants) {
-      if (member.uid !== user.value.uid) {
-        await pushNotification({
-          recipientId: member.uid,
-          type: transactionForm.value.id ? "edit_expense" : "add_expense",
-          content: `${user.value.displayName} vừa ${
-            transactionForm.value.id ? "chỉnh sửa" : "thêm"
-          } khoản ${
-            transactionForm.value.type === "income" ? "thu" : "chi"
-          } mới`,
-          eventId: event.value.id,
-          relatedId: transactionForm.value.id || transactionData.id,
-        });
+    // Send notifications to participants
+    await sendEventNotification({
+      eventId: event.value.id,
+      eventName: event.value.name,
+      type: transactionForm.value.id ? "transaction_updated" : "transaction_added",
+      content: `${user.value.displayName || user.value.email} vừa ${
+        transactionForm.value.id ? "chỉnh sửa" : "thêm"
+      } khoản ${
+        transactionForm.value.type === "income" ? "thu" : "chi"
+      } mới trong sự kiện "${event.value.name}"`,
+      createdBy: user.value.uid,
+      participants: event.value.participants || [],
+      data: {
+        eventId: event.value.id,
+        eventName: event.value.name,
+        transactionId: transactionForm.value.id || transactionData.id,
+        transactionType: transactionForm.value.type
       }
-    }
+    });
   } catch (error) {
     console.error("Error handling transaction:", error);
     alert("Có lỗi xảy ra khi lưu dữ liệu. Vui lòng thử lại.");

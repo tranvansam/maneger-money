@@ -7,17 +7,19 @@
   
       <div class="page-header">
         <h1 class="page-title">Quản lý sự kiện</h1>
-        <div v-if="friends.length > 0">
-          <button @click="openAddEventModal()" class="add-button">
-            <i class="fas fa-plus"></i>
-            Thêm sự kiện
-          </button>
-        </div>
-        <div v-else>
-          <NuxtLink to="/friends" class="add-friends-button">
-            <i class="fas fa-user-plus"></i>
-            Thêm bạn bè
-          </NuxtLink>
+        <div class="page-header-actions">
+          <div v-if="friends.length > 0">
+            <button @click="openAddEventModal()" class="add-button">
+              <i class="fas fa-plus"></i>
+              Thêm sự kiện
+            </button>
+          </div>
+          <div v-else>
+            <NuxtLink to="/friends" class="add-friends-button">
+              <i class="fas fa-user-plus"></i>
+              Thêm bạn bè
+            </NuxtLink>
+          </div>
         </div>
       </div>
   
@@ -298,7 +300,9 @@
   import { db } from '~/plugins/firebase';
   import { useAuth } from '~/composables/useAuth';
   import { useFriends } from '~/composables/useFriends';
+  import { sendEventNotification } from '~/composables/useNotifications';
   import Avatar from '~/components/Avatar.vue';
+  
   
   definePageMeta({
     middleware: 'auth'
@@ -426,7 +430,21 @@
       };
 
       // Add to Firestore
-      await addDoc(collection(db, 'events'), eventData);
+      const eventDoc = await addDoc(collection(db, 'events'), eventData);
+
+      // Send notifications to participants
+      await sendEventNotification({
+        eventId: eventDoc.id,
+        eventName: eventData.name,
+        type: 'event_created',
+        content: `${user.value.displayName || user.value.email} đã tạo sự kiện "${eventData.name}" và mời bạn tham gia`,
+        createdBy: user.value.uid,
+        participants: eventData.participants,
+        data: {
+          eventId: eventDoc.id,
+          eventName: eventData.name
+        }
+      });
 
       // Reset form and close modal
       closeEventModal();
@@ -786,6 +804,12 @@
     padding-left: 10px;
   }
   
+  .page-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
   .header-actions {
     display: flex;
     gap: 16px;

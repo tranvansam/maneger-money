@@ -175,4 +175,102 @@ export async function pushNotification({
   } else {
     return sendNotificationToAllUsers({ title, body, data });
   }
+}
+
+/**
+ * Hàm gửi notification cho event - gửi cho tất cả thành viên trừ người tạo
+ */
+export async function sendEventNotification({
+  eventId,
+  eventName,
+  type,
+  content,
+  createdBy,
+  participants,
+  data = {}
+}: {
+  eventId: string,
+  eventName: string,
+  type: string,
+  content: string,
+  createdBy: string,
+  participants: any[],
+  data?: Record<string, any>
+}) {
+  try {
+    // Lọc ra những người nhận notification (tất cả thành viên trừ người tạo)
+    const recipients = participants
+      .filter(participant => participant.uid !== createdBy)
+      .map(participant => participant.uid);
+
+    if (recipients.length === 0) {
+      console.log('No recipients for event notification');
+      return;
+    }
+
+    // Lấy FCM tokens của người nhận
+    const tokensQuery = query(
+      collection(db, 'fcm_tokens'),
+      where('userId', 'in', recipients),
+      where('isActive', '==', true)
+    );
+    
+    const tokensSnapshot = await getDocs(tokensQuery);
+    const tokens = tokensSnapshot.docs.map(doc => doc.data().token);
+
+    // Tạo notifications cho tất cả người nhận
+    const notifications = recipients.map(recipientId => ({
+      recipientId,
+      title: eventName,
+      body: content,
+      data: {
+        ...data,
+        eventId,
+        eventName,
+        type,
+        createdBy
+      },
+      isRead: false,
+      createdAt: serverTimestamp()
+    }));
+
+    // Lưu vào Firestore
+    const batch = writeBatch(db);
+    notifications.forEach(notification => {
+      const docRef = doc(collection(db, 'notifications'));
+      batch.set(docRef, notification);
+    });
+    await batch.commit();
+
+    // Gửi push notification qua FCM (nếu có tokens)
+    if (tokens.length > 0) {
+      try {
+        const response = await $fetch('/api/send-fcm', {
+          method: 'POST',
+          body: {
+            tokens,
+            title: eventName,
+            body: content,
+            data: {
+              ...data,
+              eventId,
+              eventName,
+              type,
+              createdBy
+            }
+          }
+        });
+        console.log('FCM sent:', response);
+      } catch (fcmError) {
+        console.error('FCM error:', fcmError);
+        // Không throw error vì notification đã được lưu vào Firestore
+      }
+    }
+
+    console.log(`Sent ${notifications.length} notifications for event ${eventId}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending event notification:', error);
+    throw error;
+  }
 } 

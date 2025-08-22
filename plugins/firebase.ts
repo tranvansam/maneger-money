@@ -25,6 +25,7 @@ let analytics;
 let auth: Auth;
 let db: Firestore;
 let storage: FirebaseStorage;
+let messaging: any = null;
 
 if (process.client) {
   try {
@@ -56,6 +57,14 @@ if (process.client) {
       analytics = getAnalytics(app);
     } catch (error) {
       console.log("Analytics not initialized:", error);
+    }
+
+    // Initialize messaging for push notifications
+    try {
+      messaging = getMessaging(app);
+      console.log('Messaging initialized successfully');
+    } catch (e) {
+      console.error('Messaging initialization error:', e);
     }
   } catch (error) {
     console.error("Firebase initialization error:", error);
@@ -186,47 +195,4 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     });
   }
 }); 
-export const messaging = getMessaging(initializeApp(firebaseConfig));
-
-// Lắng nghe notification khi app ở foreground
-if (typeof window !== 'undefined') {
-  try {
-    const messaging = getMessaging();
-    onMessage(messaging, (payload) => {
-      const title = payload.notification?.title || 'Thông báo mới';
-      const body = payload.notification?.body || '';
-      
-      // Show toast notification
-      toast.info(`${title}: ${body}`, {
-        autoClose: 5000,
-        position: 'top-right',
-        closeOnClick: true,
-        closeButton: true,
-        style: { marginBottom: '16px', borderRadius: '10px', boxShadow: '0 2px 12px rgba(60,60,60,0.12)' }
-      });
-
-      // Show browser notification if supported
-      if (Notification.permission === 'granted') {
-        const notification = new Notification(title, {
-          body: body,
-          icon: '/icon.png',
-          badge: '/icon.png',
-          tag: 'manager-money',
-          requireInteraction: false,
-          silent: false
-        });
-
-        notification.onclick = function() {
-          window.focus();
-          notification.close();
-          // Navigate to the relevant page if URL is provided in payload
-          if (payload.data?.url) {
-            window.location.href = payload.data.url;
-          }
-        };
-      }
-    });
-  } catch (e) {
-    console.error('Notification error:', e);
-  }
-}
+export { messaging };

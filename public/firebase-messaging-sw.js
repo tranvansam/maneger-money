@@ -22,24 +22,33 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function(payload) {
   console.log('Received background message:', payload);
 
-  const notificationTitle = payload.notification?.title || 'Thông báo mới';
+  const notificationTitle = payload.notification?.title || payload.data?.title || 'Thông báo mới';
+  const notificationBody = payload.notification?.body || payload.data?.body || '';
+  
   const notificationOptions = {
-    body: payload.notification?.body || '',
-    icon: '/icon.png',
-    badge: '/icon.png',
+    body: notificationBody,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     tag: 'manager-money',
     data: payload.data || {},
     requireInteraction: false,
-    silent: false
+    silent: false,
+    actions: [
+      {
+        action: 'open',
+        title: 'Mở',
+        icon: '/icon-192.png'
+      },
+      {
+        action: 'close',
+        title: 'Đóng',
+        icon: '/icon-192.png'
+      }
+    ]
   };
 
   // Show notification
-  if (typeof self.registration.showNotification === 'function') {
-    self.registration.showNotification(notificationTitle, notificationOptions)
-      .catch(error => {
-        console.error('Error showing notification:', error);
-      });
-  }
+  return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // Handle notification click events
@@ -47,6 +56,11 @@ self.addEventListener('notificationclick', function(event) {
   console.log('Notification click received:', event);
 
   event.notification.close();
+
+  // Handle notification actions
+  if (event.action === 'close') {
+    return;
+  }
 
   // This looks to see if the current is already open and focuses if it is
   event.waitUntil(
@@ -56,14 +70,18 @@ self.addEventListener('notificationclick', function(event) {
       // If a window tab is already open, focus it
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
-        if (client.url === '/' && 'focus' in client) {
+        if (client.url.includes('/') && 'focus' in client) {
           return client.focus();
         }
       }
       
       // If no window tab is open, open a new one
       if (clients.openWindow) {
-        const url = event.notification.data?.url || '/';
+        let url = '/';
+        // Navigate to specific event if eventId is provided
+        if (event.notification.data?.eventId) {
+          url = `/events/${event.notification.data.eventId}`;
+        }
         return clients.openWindow(url);
       }
     })
