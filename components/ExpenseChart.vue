@@ -7,7 +7,7 @@
     
     <div v-else-if="noData || (!transactions || transactions.length === 0)" class="no-data">
       <p>Không có dữ liệu chi tiêu</p>
-      <p class="sub-text">Hãy thêm các giao dịch để xem thống kê</p>
+      <p class="sub-text">Hãy thêm các chi tiêu để xem thống kê</p>
     </div>
     
     <div v-else class="charts-container">
@@ -66,16 +66,16 @@ const pieChart = ref(null);
 const barChart = ref(null);
 const lineChart = ref(null);
 
-// Tính toán dữ liệu biểu đồ từ giao dịch
+// Tính toán dữ liệu biểu đồ từ chi tiêu
 const calculateChartData = () => {
   if (!props.transactions || props.transactions.length === 0) {
-    console.log('Không có giao dịch nào để tính toán dữ liệu biểu đồ');
+    console.log('Không có chi tiêu nào để tính toán dữ liệu biểu đồ');
     return;
   }
 
-  // Lọc chỉ các giao dịch chi tiêu
+  // Lọc chỉ các chi tiêu chi tiêu
   const expenses = props.transactions.filter(transaction => transaction.type === 'expense');
-  console.log(`Đang xử lý ${expenses.length} giao dịch chi tiêu cho biểu đồ`);
+  console.log(`Đang xử lý ${expenses.length} chi tiêu chi tiêu cho biểu đồ`);
 
   // Tính tổng chi tiêu theo danh mục
   const categories = {};
@@ -333,7 +333,7 @@ const renderTrendChart = () => {
     lineChart.value.destroy();
   }
 
-  // Lọc các giao dịch chi tiêu trong 30 ngày qua
+  // Lọc các chi tiêu chi tiêu trong 30 ngày qua
   const now = new Date();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(now.getDate() - 30);
@@ -460,7 +460,7 @@ const renderTrendChart = () => {
 
 // Xem xét khi transactions thay đổi
 watch(() => props.transactions, (newValue) => {
-  console.log(`Transactions được cập nhật: ${newValue.length} giao dịch`);
+  console.log(`Transactions được cập nhật: ${newValue.length} chi tiêu`);
   calculateChartData();
 }, { deep: true });
 

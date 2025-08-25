@@ -15,7 +15,8 @@
     
     <TransactionList 
       ref="transactionListRef"
-      @add-transaction="showAddTransactionModal = true" 
+      @add-transaction="showAddTransactionModal = true"
+      @edit-transaction="handleEditTransaction"
     />
     
     <!-- Hệ thống notification -->
@@ -27,18 +28,18 @@
       </div>
     </div>
     
-    <!-- Modal thêm giao dịch -->
+    <!-- Modal thêm chi tiêu -->
     <div v-if="showAddTransactionModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header" :class="{ 'income-header': newTransaction.type === 'income', 'expense-header': newTransaction.type === 'expense' }">
-          <h2>Thêm giao dịch</h2>
-          <button @click="showAddTransactionModal = false" class="close-button">&times;</button>
+          <h2>{{ isEditMode ? 'Chỉnh sửa chi tiêu' : 'Thêm chi tiêu' }}</h2>
+          <button @click="closeModal" class="close-button">&times;</button>
         </div>
         
         <div class="modal-body">
           <form @submit.prevent="addTransaction">
             <div class="form-group">
-              <label>Loại giao dịch</label>
+              <label>Loại chi tiêu</label>
               <div class="radio-group">
                 <label 
                   class="radio-option" 
@@ -117,9 +118,9 @@
         </div>
         
         <div class="form-actions">
-          <button type="button" @click="showAddTransactionModal = false" class="cancel-button">Hủy</button>
-          <button type="submit" @click="addTransaction" class="submit-button" :disabled="modalLoading">
-            {{ modalLoading ? 'Đang xử lý...' : 'Lưu giao dịch' }}
+          <button type="button" @click="closeModal" class="cancel-button">Hủy</button>
+          <button type="submit" @click="saveTransaction" class="submit-button" :disabled="modalLoading">
+            {{ modalLoading ? 'Đang xử lý...' : (isEditMode ? 'Cập nhật chi tiêu' : 'Lưu chi tiêu') }}
           </button>
         </div>
       </div>
@@ -135,7 +136,7 @@
 
 <script setup>
 import { ref, onMounted, watch, nextTick, computed } from 'vue';
-import { collection, addDoc, query, getDocs, where } from 'firebase/firestore';
+import { collection, addDoc, query, getDocs, where, updateDoc, doc } from 'firebase/firestore';
 import { db } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
 import TransactionList from '~/components/TransactionList.vue';
@@ -156,6 +157,8 @@ const transactionListRef = ref(null);
 
 // Trạng thái hiển thị modal
 const showAddTransactionModal = ref(false);
+const isEditMode = ref(false);
+const editingTransactionId = ref(null);
 
 // Transaction mới
 const newTransaction = ref({
@@ -224,10 +227,13 @@ watch(() => showAddTransactionModal.value, async (isOpen) => {
   if (isOpen) {
     // Khi mở modal, fetch categories và set default dựa vào type hiện tại
     await fetchCategories();
-    // Set category mặc định dựa vào type
-    newTransaction.value.category = newTransaction.value.type === 'income' 
-      ? currentDefaultIncome.value 
-      : currentDefaultExpense.value;
+    
+    // Chỉ set category mặc định nếu không phải edit mode
+    if (!isEditMode.value) {
+      newTransaction.value.category = newTransaction.value.type === 'income' 
+        ? currentDefaultIncome.value 
+        : currentDefaultExpense.value;
+    }
   }
 });
 
@@ -286,12 +292,124 @@ const showNotification = (message, type = 'success') => {
   };
 };
 
-// Thêm giao dịch mới
+// Hàm xử lý chỉnh sửa chi tiêu
+const handleEditTransaction = (transaction) => {
+  console.log("handleEditTransaction called with:", transaction);
+  
+  // Chuyển sang edit mode
+  isEditMode.value = true;
+  editingTransactionId.value = transaction.id;
+  
+  // Điền dữ liệu vào form
+  newTransaction.value = {
+    type: transaction.type,
+    amount: transaction.amount.toString(),
+    date: formatDateForInput(transaction.date),
+    description: transaction.description || '',
+    category: transaction.category
+  };
+  
+  // Format amount cho hiển thị
+  formattedAmount.value = new Intl.NumberFormat('vi-VN').format(transaction.amount);
+  
+  // Mở modal
+  showAddTransactionModal.value = true;
+};
+
+// Hàm đóng modal
+const closeModal = () => {
+  showAddTransactionModal.value = false;
+  isEditMode.value = false;
+  editingTransactionId.value = null;
+  
+  // Reset form về trạng thái ban đầu
+  newTransaction.value = {
+    type: 'expense',
+    amount: '',
+    date: formatDateForInput(new Date()),
+    description: '',
+    category: 'other_expense'
+  };
+  formattedAmount.value = '';
+};
+
+// Hàm lưu chi tiêu (tạo mới hoặc cập nhật)
+const saveTransaction = async () => {
+  if (isEditMode.value) {
+    await updateTransaction();
+  } else {
+    await addTransaction();
+  }
+};
+
+// Hàm cập nhật chi tiêu
+const updateTransaction = async () => {
+  if (!user.value) {
+    showNotification('Vui lòng đăng nhập để chỉnh sửa chi tiêu', 'error');
+    return;
+  }
+  
+  if (!newTransaction.value.amount || !newTransaction.value.category) {
+    showNotification('Vui lòng nhập đầy đủ số tiền và chọn danh mục', 'error');
+    return;
+  }
+  
+  modalLoading.value = true;
+  
+  try {
+    // Đảm bảo date là đối tượng Date
+    let transactionDate;
+    try {
+      transactionDate = new Date(newTransaction.value.date);
+      if (isNaN(transactionDate.getTime())) {
+        throw new Error("Invalid date");
+      }
+    } catch (error) {
+      console.error("Error parsing date:", error);
+      transactionDate = new Date();
+    }
+    
+    // Đảm bảo amount là số
+    const amount = parseInt(newTransaction.value.amount) || 0;
+    if (amount <= 0) {
+      throw new Error("Amount must be greater than 0");
+    }
+    
+    const transactionData = {
+      type: newTransaction.value.type,
+      amount: amount,
+      date: transactionDate,
+      description: newTransaction.value.description || 'Không có mô tả',
+      category: newTransaction.value.category,
+      updatedAt: new Date()
+    };
+    
+    // Cập nhật chi tiêu trong Firestore
+    const docRef = doc(db, 'users', user.value.uid, 'transactions', editingTransactionId.value);
+    await updateDoc(docRef, transactionData);
+    
+    // Đóng modal và hiển thị thông báo
+    closeModal();
+    showNotification('Cập nhật chi tiêu thành công!');
+    
+    // Refresh danh sách chi tiêu
+    setTimeout(() => {
+      refreshData();
+    }, 300);
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    showNotification('Không thể cập nhật chi tiêu: ' + (error.message || 'Lỗi không xác định'), 'error');
+  } finally {
+    modalLoading.value = false;
+  }
+};
+
+// Thêm chi tiêu mới
 const addTransaction = async () => {
   console.log("addTransaction function called");
   if (!user.value) {
     console.error("Cannot add transaction: User not authenticated");
-    showNotification('Vui lòng đăng nhập để thêm giao dịch', 'error');
+    showNotification('Vui lòng đăng nhập để thêm chi tiêu', 'error');
     return;
   }
   
@@ -345,29 +463,20 @@ const addTransaction = async () => {
     
     console.log("Transaction added successfully with ID:", docRef.id);
     
-    // Reset form
-    newTransaction.value = {
-      type: 'expense',
-      amount: '',
-      date: formatDateForInput(new Date()),
-      description: '',
-      category: 'other_expense'
-    };
-    formattedAmount.value = '';
-    
-    showAddTransactionModal.value = false;
+    // Reset form và đóng modal
+    closeModal();
     
     // Thông báo thành công
-    showNotification('Thêm giao dịch thành công!');
+    showNotification('Thêm chi tiêu thành công!');
     
-    // Refresh danh sách giao dịch
+    // Refresh danh sách chi tiêu
     console.log("Refreshing transaction list after adding new transaction");
     setTimeout(() => {
       refreshData();
     }, 300);
   } catch (error) {
     console.error('Error adding transaction:', error);
-    showNotification('Không thể thêm giao dịch mới: ' + (error.message || 'Lỗi không xác định'), 'error');
+    showNotification('Không thể thêm chi tiêu mới: ' + (error.message || 'Lỗi không xác định'), 'error');
   } finally {
     modalLoading.value = false;
   }
@@ -598,6 +707,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   max-width: 1200px;
   margin: 0 auto;
   position: relative;
+  min-height: 100vh;
+  background-color: #f8f9fa;
 }
 
 .page-title {
@@ -907,7 +1018,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
 
 @media (max-width: 768px) {
   .transactions-page {
-    padding: 15px;
+    padding: 10px;
+    background-color: #f8f9fa;
   }
   
   .page-title {
@@ -926,6 +1038,94 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   .cancel-button, 
   .submit-button {
     flex: 1;
+  }
+  
+  /* Mobile modal improvements */
+  .modal {
+    width: 95%;
+    max-width: none;
+    margin: 10px;
+    border-radius: 12px;
+  }
+  
+  .modal-header {
+    padding: 12px 16px;
+  }
+  
+  .modal-header h2 {
+    font-size: 18px;
+  }
+  
+  .modal-body {
+    padding: 16px;
+  }
+  
+  .form-group {
+    margin-bottom: 16px;
+  }
+  
+  .form-group label {
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+  
+  .form-group input[type="text"],
+  .form-group input[type="date"],
+  .form-group select {
+    padding: 12px;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  
+  .radio-group {
+    gap: 20px;
+  }
+  
+  .radio-option {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  
+  .amount-input input {
+    font-size: 16px;
+    padding: 12px;
+  }
+  
+  .category-select {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .manage-categories-icon {
+    width: 40px;
+    height: 40px;
+    align-self: center;
+  }
+  
+  .form-actions {
+    padding: 12px 16px;
+  }
+  
+  .cancel-button, 
+  .submit-button {
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+  
+  /* Mobile notification improvements */
+  .notification {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    min-width: auto;
+    max-width: none;
+  }
+  
+  .notification-content {
+    padding: 12px;
+  }
+  
+  .notification p {
+    font-size: 14px;
   }
 }
 

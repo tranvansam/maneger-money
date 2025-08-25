@@ -63,7 +63,7 @@
           <div class="quick-action-grid">
             <NuxtLink to="/transactions?action=add-transaction" @click="showQuickAddModal = false" class="quick-action-button">
               <span class="quick-action-icon">💰</span>
-              <span>Thêm giao dịch</span>
+              <span>Thêm chi tiêu</span>
             </NuxtLink>
             
             <NuxtLink to="/debts?action=add-debt&tab=owed" @click="showQuickAddModal = false" class="quick-action-button">

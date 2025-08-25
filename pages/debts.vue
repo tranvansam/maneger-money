@@ -39,7 +39,7 @@
         <div class="description-title">
           <i class="info-icon">ℹ️</i> Thông tin về khoản nợ
         </div>
-        <p>Khi bạn đánh dấu đã <strong>thanh toán</strong> một khoản nợ, hệ thống sẽ tự động thêm một giao dịch <strong>chi tiêu</strong> vào quản lý giao dịch của bạn.</p>
+        <p>Khi bạn đánh dấu đã <strong>thanh toán</strong> một khoản nợ, hệ thống sẽ tự động thêm một chi tiêu <strong>chi tiêu</strong> vào quản lý chi tiêu của bạn.</p>
       </div>
     </div>
     
@@ -55,8 +55,8 @@
         <div class="description-title">
           <i class="info-icon">ℹ️</i> Thông tin về khoản cho mượn
         </div>
-        <p>Khi bạn thêm mới một khoản <strong>cho mượn</strong>, hệ thống sẽ tự động thêm một giao dịch <strong>chi tiêu</strong> vào quản lý giao dịch của bạn.</p>
-        <p>Khi bạn đánh dấu đã <strong>thu hồi</strong> khoản cho mượn, hệ thống sẽ tự động thêm một giao dịch <strong>thu nhập</strong> vào quản lý giao dịch của bạn.</p>
+        <p>Khi bạn thêm mới một khoản <strong>cho mượn</strong>, hệ thống sẽ tự động thêm một chi tiêu <strong>chi tiêu</strong> vào quản lý chi tiêu của bạn.</p>
+        <p>Khi bạn đánh dấu đã <strong>thu hồi</strong> khoản cho mượn, hệ thống sẽ tự động thêm một chi tiêu <strong>thu nhập</strong> vào quản lý chi tiêu của bạn.</p>
       </div>
     </div>
   </div>

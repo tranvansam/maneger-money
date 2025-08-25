@@ -247,7 +247,7 @@
           </div>
 
           <div v-if="filteredTransactions.length === 0" class="no-transactions">
-            Chưa có giao dịch nào
+            Chưa có chi tiêu nào
           </div>
         </div>
       </div>
@@ -1220,7 +1220,7 @@
           </div>
 
           <div class="modal-body">
-            <p>Bạn có chắc chắn muốn xóa giao dịch này?</p>
+            <p>Bạn có chắc chắn muốn xóa chi tiêu này?</p>
             <p class="delete-info">
               {{ selectedTransaction?.description }} -
               {{ formatCurrency(selectedTransaction?.amount || 0) }}
@@ -1496,7 +1496,7 @@
           <div class="modal-body">
             <p>
               Bạn có chắc chắn muốn kết thúc sự kiện này? Sau khi kết thúc, mọi
-              người sẽ không thể thêm giao dịch mới.
+              người sẽ không thể thêm chi tiêu mới.
             </p>
             <p class="delete-info">{{ event.name }}</p>
           </div>
@@ -1867,7 +1867,7 @@ const handleDeleteTransaction = async () => {
     selectedTransaction.value = null;
   } catch (error) {
     console.error("Error deleting transaction:", error);
-    alert("Có lỗi xảy ra khi xóa giao dịch. Vui lòng thử lại.");
+    alert("Có lỗi xảy ra khi xóa chi tiêu. Vui lòng thử lại.");
   } finally {
     isSubmitting.value = false;
   }

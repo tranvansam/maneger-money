@@ -28,7 +28,7 @@
           
           <div class="menu-item" :class="{ 'active': isCurrentRoute('/transactions') }" @click="navigateTo('/transactions')">
             <span class="menu-icon">💰</span>
-            <span class="menu-text">Giao dịch</span>
+            <span class="menu-text">Chi tiêu</span>
           </div>
           
           <div class="menu-item" :class="{ 'active': isCurrentRoute('/events') }" @click="navigateTo('/events')">
@@ -86,7 +86,7 @@
       
       <div class="mobile-nav-item" :class="{ 'active': isCurrentRoute('/transactions') }" @click="navigateTo('/transactions')">
         <span class="mobile-nav-icon">💰</span>
-        <span class="mobile-nav-text">Giao dịch</span>
+        <span class="mobile-nav-text">Chi tiêu</span>
       </div>
       
       <div class="mobile-nav-item" :class="{ 'active': isCurrentRoute('/events') }" @click="navigateTo('/events')">

@@ -1039,7 +1039,7 @@ const addDebt = async () => {
       debtData
     );
     
-    // Nếu là khoản "cho mượn", thêm giao dịch chi tiêu
+    // Nếu là khoản "cho mượn", thêm chi tiêu chi tiêu
     if (newDebt.value.debtType === 'lent') {
       const transactionData = {
         type: 'expense',
@@ -1058,7 +1058,7 @@ const addDebt = async () => {
         transactionData
       );
       
-      console.log("Đã thêm giao dịch chi tiêu cho khoản cho mượn");
+      console.log("Đã thêm chi tiêu chi tiêu cho khoản cho mượn");
     }
     
     // Thông báo cho components cha khi thêm nợ thành công
@@ -1125,7 +1125,7 @@ const toggleDebtStatus = async (debt) => {
       });
     }
     
-    // Nếu đánh dấu đã trả/đã thu hồi, thêm giao dịch vào hệ thống
+    // Nếu đánh dấu đã trả/đã thu hồi, thêm chi tiêu vào hệ thống
     if (newPaidStatus) {
       const isLent = debt.debtType === 'lent';
       
@@ -1150,7 +1150,7 @@ const toggleDebtStatus = async (debt) => {
         transactionData
       );
       
-      console.log(`Đã thêm giao dịch ${isLent ? 'thu nhập' : 'chi tiêu'} ${debt.isRecurring ? `cho tháng ${currentMonthKey}` : ''}`);
+      console.log(`Đã thêm chi tiêu ${isLent ? 'thu nhập' : 'chi tiêu'} ${debt.isRecurring ? `cho tháng ${currentMonthKey}` : ''}`);
     }
     
     // Emit event khi trạng thái nợ được cập nhật
@@ -1302,7 +1302,7 @@ const confirmSettlement = async () => {
       updatedAt: Timestamp.now()
     });
 
-    // Thêm giao dịch tất toán
+    // Thêm chi tiêu tất toán
     const transactionData = {
       type: selectedDebt.value.debtType === 'lent' ? 'income' : 'expense',
       amount: settlementAmount.value,
@@ -1532,18 +1532,18 @@ const deleteDebt = async () => {
   loading.value = true;
   modalLoading.value = true;
   try {
-    // 1. Xóa các giao dịch liên quan đến khoản nợ
+    // 1. Xóa các chi tiêu liên quan đến khoản nợ
     const transactionsRef = collection(db, 'users', user.value.uid, 'transactions');
     const q = query(transactionsRef, where('debtId', '==', editingDebt.value.id));
     const querySnapshot = await getDocs(q);
     
-    // Xóa từng giao dịch
+    // Xóa từng chi tiêu
     const deletePromises = querySnapshot.docs.map(doc => {
       return deleteDoc(doc.ref);
     });
     await Promise.all(deletePromises);
     
-    console.log(`Đã xóa ${querySnapshot.size} giao dịch liên quan`);
+    console.log(`Đã xóa ${querySnapshot.size} chi tiêu liên quan`);
 
     // 2. Xóa khoản nợ
     const debtRef = doc(db, 'users', user.value.uid, 'debts', editingDebt.value.id);
