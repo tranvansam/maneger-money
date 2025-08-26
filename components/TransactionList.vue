@@ -124,6 +124,71 @@
       </div>
     </div>
 
+    <!-- Transaction Calendar -->
+    <TransactionCalendar 
+      :transactions="transactions"
+      @date-selected="handleDateSelected"
+    />
+
+    <!-- Daily Summary Table -->
+    <div v-if="transactions.length > 0" class="daily-summary-section">
+      <div class="daily-summary-header">
+        <h3>Tổng quan theo ngày</h3>
+        <div class="summary-stats">
+          <span class="stat-item">
+            <span class="stat-label">Tổng ngày:</span>
+            <span class="stat-value">{{ dailySummary.length }}</span>
+          </span>
+          <span class="stat-item">
+            <span class="stat-label">Cao nhất:</span>
+            <span class="stat-value">{{ formatCurrency(maxDailyAmount) }}</span>
+          </span>
+        </div>
+      </div>
+      
+      <div class="daily-summary-table">
+        <div class="table-header">
+          <div class="header-cell date-col">Ngày</div>
+          <div class="header-cell income-col">Thu nhập</div>
+          <div class="header-cell expense-col">Chi tiêu</div>
+          <div class="header-cell balance-col">Số dư</div>
+        </div>
+        
+        <div class="table-body">
+          <div 
+            v-for="day in dailySummary" 
+            :key="day.date" 
+            class="table-row"
+            :class="{ 'today': day.isToday, 'highlight': day.balance > 0 }"
+          >
+            <div class="table-cell date-col">
+              <div class="date-info">
+                <div class="date-label">{{ formatDateLabel(day.date) }}</div>
+                <div class="date-subtitle">{{ formatDateSubtitle(day.date) }}</div>
+              </div>
+            </div>
+            <div class="table-cell income-col">
+              <span v-if="day.income > 0" class="amount income">
+                +{{ formatCurrency(day.income) }}
+              </span>
+              <span v-else class="amount zero">-</span>
+            </div>
+            <div class="table-cell expense-col">
+              <span v-if="day.expense > 0" class="amount expense">
+                -{{ formatCurrency(day.expense) }}
+              </span>
+              <span v-else class="amount zero">-</span>
+            </div>
+            <div class="table-cell balance-col">
+              <span class="amount" :class="{ 'positive': day.balance >= 0, 'negative': day.balance < 0 }">
+                {{ formatCurrency(day.balance) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="transactions-summary">
       <div class="summary-card income-card">
         <div class="summary-icon">
@@ -303,6 +368,58 @@
     </div>
   </div>
 
+  <!-- Daily Transactions Modal -->
+  <div v-if="showDailyTransactionsModal" class="modal-overlay" @click="closeDailyTransactionsModal">
+    <div class="modal daily-transactions-modal" @click.stop>
+      <div class="modal-header">
+        <h2>Chi tiết giao dịch ngày {{ formatDateLabel(selectedDay?.date) }}</h2>
+        <button @click="closeDailyTransactionsModal" class="close-button">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <div v-if="selectedDay?.transactions?.length > 0" class="daily-transactions-list">
+                     <div class="daily-summary-stats">
+             <div class="stat-item">
+               <span class="stat-label">Thu nhập:</span>
+               <span class="stat-value income">+{{ formatCurrency(selectedDayIncome) }}</span>
+             </div>
+             <div class="stat-item">
+               <span class="stat-label">Chi tiêu:</span>
+               <span class="stat-value expense">-{{ formatCurrency(selectedDayExpense) }}</span>
+             </div>
+             <div class="stat-item">
+               <span class="stat-label">Số dư:</span>
+               <span class="stat-value" :class="{ 'positive': selectedDay.balance >= 0, 'negative': selectedDay.balance < 0 }">
+                 {{ formatCurrency(selectedDay.balance) }}
+               </span>
+             </div>
+           </div>
+          
+          <div class="transactions-container">
+            <div 
+              v-for="transaction in selectedDay.transactions" 
+              :key="transaction.id"
+              class="transaction-item"
+            >
+              <div class="transaction-info">
+                <div class="transaction-description">{{ transaction.description || 'Không có mô tả' }}</div>
+                <div class="transaction-category">{{ getCategoryName(transaction.category) }}</div>
+                <div class="transaction-time">{{ formatTime(transaction.date) }}</div>
+              </div>
+              <div class="transaction-amount" :class="{ 'income': transaction.type === 'income', 'expense': transaction.type === 'expense' }">
+                {{ transaction.type === 'income' ? '+' : '-' }} {{ formatCurrency(transaction.amount) }}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="no-transactions">
+          <div class="no-transactions-icon">📅</div>
+          <p>Không có giao dịch nào trong ngày này</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
 </template>
 
@@ -312,6 +429,7 @@ import { collection, getDocs, query, where, orderBy, Timestamp, deleteDoc, doc, 
 import { db, auth } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
 import { onAuthStateChanged } from 'firebase/auth';
+import TransactionCalendar from '~/components/TransactionCalendar.vue';
 
 const { user } = useAuth();
 const loading = ref(false);
@@ -350,6 +468,10 @@ const categoriesLoading = ref(false);
 // const showEditModal = ref(false);
 // const editingTransaction = ref(null);
 // const editLoading = ref(false);
+
+// State cho daily transactions modal
+const showDailyTransactionsModal = ref(false);
+const selectedDay = ref(null);
 
 // Định nghĩa tên tiếng Việt cho các danh mục
 const categoryNames = {
@@ -439,6 +561,83 @@ const balance = computed(() => {
   return totalIncome.value - totalExpense.value;
 });
 
+// Computed properties for daily summary table
+const dailySummary = computed(() => {
+  const dailyData = {};
+  
+  // Group transactions by date
+  transactions.value.forEach(transaction => {
+    const dateKey = formatDateForInput(transaction.date);
+    if (!dailyData[dateKey]) {
+      dailyData[dateKey] = {
+        date: dateKey,
+        income: 0,
+        expense: 0,
+        balance: 0,
+        isToday: false
+      };
+    }
+    
+    const amount = typeof transaction.amount === 'number' 
+      ? transaction.amount 
+      : parseFloat(String(transaction.amount).replace(/[^\d.-]/g, '')) || 0;
+    
+    if (transaction.type === 'income') {
+      dailyData[dateKey].income += amount;
+    } else {
+      dailyData[dateKey].expense += amount;
+    }
+  });
+  
+  // Calculate balance and mark today
+  const today = formatDateForInput(new Date());
+  Object.keys(dailyData).forEach(dateKey => {
+    const day = dailyData[dateKey];
+    day.balance = day.income - day.expense;
+    day.isToday = dateKey === today;
+  });
+  
+  // Sort by date (newest first)
+  return Object.values(dailyData).sort((a, b) => new Date(b.date) - new Date(a.date));
+});
+
+const maxDailyAmount = computed(() => {
+  if (dailySummary.value.length === 0) return 0;
+  
+  const maxIncome = Math.max(...dailySummary.value.map(day => day.income));
+  const maxExpense = Math.max(...dailySummary.value.map(day => day.expense));
+  const maxBalance = Math.max(...dailySummary.value.map(day => Math.abs(day.balance)));
+  
+  return Math.max(maxIncome, maxExpense, maxBalance);
+});
+
+// Computed properties for selected day modal
+const selectedDayIncome = computed(() => {
+  if (!selectedDay.value?.transactions) return 0;
+  
+  return selectedDay.value.transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, transaction) => {
+      const amount = typeof transaction.amount === 'number'
+        ? transaction.amount
+        : parseFloat(String(transaction.amount).replace(/[^\d.-]/g, '')) || 0;
+      return sum + amount;
+    }, 0);
+});
+
+const selectedDayExpense = computed(() => {
+  if (!selectedDay.value?.transactions) return 0;
+  
+  return selectedDay.value.transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, transaction) => {
+      const amount = typeof transaction.amount === 'number'
+        ? transaction.amount
+        : parseFloat(String(transaction.amount).replace(/[^\d.-]/g, '')) || 0;
+      return sum + amount;
+    }, 0);
+});
+
 // Hàm định dạng tiền VND
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
@@ -489,6 +688,25 @@ const formatDateLabel = (dateString) => {
       day: 'numeric'
     });
   }
+};
+
+// Hàm định dạng phụ đề ngày cho daily summary table
+const formatDateSubtitle = (dateString) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+};
+
+// Hàm định dạng thời gian cho modal
+const formatTime = (timestamp) => {
+  const date = timestamp instanceof Timestamp ? timestamp.toDate() : new Date(timestamp);
+  return date.toLocaleTimeString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
 // Hàm tính toán cho tree view
@@ -570,6 +788,19 @@ const applyCustomFilter = () => {
 // View mode toggle
 const toggleViewMode = () => {
   viewMode.value = viewMode.value === 'list' ? 'tree' : 'list';
+};
+
+// Handle date selection from calendar
+const handleDateSelected = (day) => {
+  // Show modal with day's transactions (don't change main list filters)
+  selectedDay.value = day;
+  showDailyTransactionsModal.value = true;
+};
+
+// Close daily transactions modal
+const closeDailyTransactionsModal = () => {
+  showDailyTransactionsModal.value = false;
+  selectedDay.value = null;
 };
 
 // Touch/swipe handlers
@@ -1490,6 +1721,274 @@ defineExpose({
 
 .summary-amount.negative {
   color: #FF9800;
+}
+
+/* Daily Summary Table Styles */
+.daily-summary-section {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+}
+
+.daily-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #dee2e6;
+}
+
+.daily-summary-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.daily-summary-table {
+  overflow-x: auto;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 1px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.header-cell {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: #f8f9fa;
+  border-right: 1px solid #dee2e6;
+}
+
+.header-cell:last-child {
+  border-right: none;
+}
+
+.table-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 1px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s ease;
+}
+
+.table-row:hover {
+  background-color: #f8f9fa;
+}
+
+.table-row.today {
+  background-color: #e3f2fd;
+  border-left: 4px solid #2196F3;
+}
+
+.table-row.highlight {
+  background-color: #e8f5e9;
+}
+
+.table-cell {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid #f0f0f0;
+  font-size: 14px;
+}
+
+.table-cell:last-child {
+  border-right: none;
+}
+
+.date-col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.date-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.date-label {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.date-subtitle {
+  font-size: 12px;
+  color: #666;
+}
+
+.income-col, .expense-col, .balance-col {
+  justify-content: flex-end;
+  font-weight: 500;
+}
+
+.amount {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.amount.income {
+  color: #4CAF50;
+}
+
+.amount.expense {
+  color: #f44336;
+}
+
+.amount.positive {
+  color: #2196F3;
+}
+
+.amount.negative {
+  color: #FF9800;
+}
+
+.amount.zero {
+  color: #999;
+  font-weight: 400;
+}
+
+/* Mobile responsive for daily summary table */
+@media (max-width: 768px) {
+  .daily-summary-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .summary-stats {
+    gap: 16px;
+  }
+  
+  .table-header {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  }
+  
+  .table-row {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  }
+  
+  .table-cell {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  
+  .date-label {
+    font-size: 13px;
+  }
+  
+  .date-subtitle {
+    font-size: 11px;
+  }
+  
+  .amount {
+    font-size: 13px;
+  }
+  
+  .header-cell {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  
+  .table-body {
+    max-height: 300px;
+  }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 480px) {
+  .daily-summary-header {
+    padding: 12px 16px;
+  }
+  
+  .daily-summary-header h3 {
+    font-size: 16px;
+  }
+  
+  .table-header {
+    grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  }
+  
+  .table-row {
+    grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  }
+  
+  .table-cell {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  
+  .date-label {
+    font-size: 12px;
+  }
+  
+  .date-subtitle {
+    font-size: 10px;
+  }
+  
+  .amount {
+    font-size: 12px;
+  }
+  
+  .header-cell {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+  
+  .summary-stats {
+    gap: 12px;
+  }
+  
+  .stat-label {
+    font-size: 11px;
+  }
+  
+  .stat-value {
+    font-size: 12px;
+  }
 }
 
 .income {
@@ -2432,5 +2931,270 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* Daily Transactions Modal Styles */
+.daily-transactions-modal {
+  max-width: 700px;
+  width: 90%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.daily-transactions-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.daily-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 28px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.daily-summary-stats .stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 12px;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.daily-summary-stats .stat-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.daily-summary-stats .stat-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.daily-summary-stats .stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.2;
+}
+
+.daily-summary-stats .stat-value.income {
+  color: #2E7D32;
+}
+
+.daily-summary-stats .stat-value.expense {
+  color: #c62828;
+}
+
+.daily-summary-stats .stat-value.positive {
+  color: #2E7D32;
+}
+
+.daily-summary-stats .stat-value.negative {
+  color: #c62828;
+}
+
+.transactions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.transaction-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #dee2e6 0%, #adb5bd 100%);
+}
+
+.transaction-item:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border-color: #dee2e6;
+  transform: translateY(-2px);
+}
+
+.transaction-item:hover::before {
+  background: linear-gradient(180deg, #4CAF50 0%, #2E7D32 100%);
+}
+
+.transaction-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.transaction-description {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.4;
+  margin-bottom: 2px;
+}
+
+.transaction-category {
+  font-size: 12px;
+  color: #666;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  padding: 4px 10px;
+  border-radius: 16px;
+  display: inline-block;
+  width: fit-content;
+  font-weight: 500;
+  border: 1px solid #dee2e6;
+}
+
+.transaction-time {
+  font-size: 12px;
+  color: #999;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.transaction-amount {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: right;
+  min-width: 120px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  transition: all 0.2s ease;
+}
+
+.transaction-amount.income {
+  color: #2E7D32;
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border: 1px solid #a5d6a7;
+}
+
+.transaction-amount.expense {
+  color: #c62828;
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  border: 1px solid #ef9a9a;
+}
+
+.no-transactions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+}
+
+.no-transactions-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-transactions p {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Mobile responsive for modal */
+@media (max-width: 768px) {
+  .daily-transactions-modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .daily-summary-stats {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+  
+  .daily-summary-stats .stat-item {
+    padding: 10px;
+  }
+  
+  .daily-summary-stats .stat-value {
+    font-size: 16px;
+  }
+  
+  .transaction-item {
+    padding: 16px;
+  }
+  
+  .transaction-description {
+    font-size: 15px;
+  }
+  
+  .transaction-amount {
+    font-size: 16px;
+    min-width: 100px;
+    padding: 6px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .daily-transactions-modal {
+    width: 98%;
+    max-height: 95vh;
+  }
+  
+  .daily-transactions-modal .modal-body {
+    padding: 16px;
+  }
+  
+  .transaction-item {
+    padding: 10px;
+  }
+  
+  .transaction-description {
+    font-size: 13px;
+  }
+  
+  .transaction-category {
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+  
+  .transaction-time {
+    font-size: 10px;
+  }
+  
+  .transaction-amount {
+    font-size: 13px;
+    min-width: 70px;
+  }
 }
 </style>
