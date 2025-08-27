@@ -1,20 +1,17 @@
 <template>
   <div class="transaction-calendar">
-    <div class="calendar-header">
-      <h3>Lịch chi tiêu</h3>
-      <div class="calendar-controls">
-        <button @click="previousMonth" class="nav-button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15,18 9,12 15,6"></polyline>
-          </svg>
-        </button>
-        <span class="current-month">{{ currentMonthYear }}</span>
-        <button @click="nextMonth" class="nav-button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9,18 15,12 9,6"></polyline>
-          </svg>
-        </button>
-      </div>
+    <div class="calendar-controls">
+      <button @click="previousMonth" class="nav-button" :disabled="!canNavigatePrevious">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15,18 9,12 15,6"></polyline>
+        </svg>
+      </button>
+      <span class="current-month">{{ currentMonthYear }}</span>
+      <button @click="nextMonth" class="nav-button" :disabled="!canNavigateNext">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9,18 15,12 9,6"></polyline>
+        </svg>
+      </button>
     </div>
 
     <div class="calendar-grid">
@@ -42,10 +39,10 @@
             class="calendar-cell day-cell"
             :class="{
               'other-month': day?.otherMonth,
-              'today': day?.isToday,
               'has-transactions': day?.hasTransactions,
               'positive-balance': day?.balance > 0,
-              'negative-balance': day?.balance < 0
+              'negative-balance': day?.balance < 0,
+              'disabled': day?.disabled
             }"
             @click="selectDate(day)"
           >
@@ -62,21 +59,7 @@
       </div>
     </div>
 
-    <!-- Legend -->
-    <div class="calendar-legend">
-      <div class="legend-item">
-        <div class="legend-color positive"></div>
-        <span>Số dư dương</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-color negative"></div>
-        <span>Số dư âm</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-color today"></div>
-        <span>Hôm nay</span>
-      </div>
-    </div>
+
   </div>
 </template>
 
@@ -89,6 +72,14 @@ const props = defineProps({
     default: () => []
   },
   selectedDate: {
+    type: String,
+    default: null
+  },
+  filterStartDate: {
+    type: String,
+    default: null
+  },
+  filterEndDate: {
     type: String,
     default: null
   }
@@ -106,6 +97,52 @@ const currentMonthYear = computed(() => {
     month: 'long',
     year: 'numeric'
   });
+});
+
+// Check if current month is within filter range
+const isCurrentMonthInRange = computed(() => {
+  if (!props.filterStartDate || !props.filterEndDate) return true;
+  
+  const filterStart = new Date(props.filterStartDate);
+  const filterEnd = new Date(props.filterEndDate);
+  const currentMonthStart = new Date(currentYear.value, currentMonth.value, 1);
+  const currentMonthEnd = new Date(currentYear.value, currentMonth.value + 1, 0);
+  
+  // Check if current month overlaps with filter range
+  return currentMonthStart <= filterEnd && currentMonthEnd >= filterStart;
+});
+
+// Check if a specific date is within filter range
+const isDateInRange = (dateString) => {
+  if (!props.filterStartDate || !props.filterEndDate) return true;
+  
+  const date = new Date(dateString);
+  const filterStart = new Date(props.filterStartDate);
+  const filterEnd = new Date(props.filterEndDate);
+  
+  return date >= filterStart && date <= filterEnd;
+};
+
+// Check if we can navigate to previous month
+const canNavigatePrevious = computed(() => {
+  if (!props.filterStartDate) return true;
+  
+  const filterStart = new Date(props.filterStartDate);
+  const previousMonthEnd = new Date(currentYear.value, currentMonth.value, 0);
+  
+  // Allow navigation if previous month overlaps with filter range
+  return previousMonthEnd >= filterStart;
+});
+
+// Check if we can navigate to next month
+const canNavigateNext = computed(() => {
+  if (!props.filterEndDate) return true;
+  
+  const filterEnd = new Date(props.filterEndDate);
+  const nextMonthStart = new Date(currentYear.value, currentMonth.value + 1, 1);
+  
+  // Allow navigation if next month overlaps with filter range
+  return nextMonthStart <= filterEnd;
 });
 
 const calendarWeeks = computed(() => {
@@ -158,15 +195,15 @@ const calendarWeeks = computed(() => {
         }
       }, 0);
       
-      const day = {
-        date: dateKey,
-        dayNumber: currentDay.getDate(),
-        otherMonth: currentDay.getMonth() !== month,
-        isToday: dateKey === formatDateForInput(new Date()),
-        hasTransactions: dayTransactions.length > 0,
-        balance: dayBalance,
-        transactions: dayTransactions
-      };
+             const day = {
+         date: dateKey,
+         dayNumber: currentDay.getDate(),
+         otherMonth: currentDay.getMonth() !== month,
+         hasTransactions: dayTransactions.length > 0,
+         balance: dayBalance,
+         transactions: dayTransactions,
+         disabled: !isDateInRange(dateKey)
+       };
       
       week.push(day);
       currentDay.setDate(currentDay.getDate() + 1);
@@ -222,8 +259,14 @@ const nextMonth = () => {
   }
 };
 
+// Method to navigate to a specific month and year
+const navigateToMonth = (month, year) => {
+  currentMonth.value = month;
+  currentYear.value = year;
+};
+
 const selectDate = (day) => {
-  if (day && !day.otherMonth) {
+  if (day && !day.otherMonth && !day.disabled) {
     emit('date-selected', day);
   }
 };
@@ -240,36 +283,26 @@ onMounted(() => {
   currentMonth.value = now.getMonth();
   currentYear.value = now.getFullYear();
 });
+
+// Expose methods to parent component
+defineExpose({
+  navigateToMonth
+});
 </script>
 
 <style scoped>
 .transaction-calendar {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  border: 1px solid #dee2e6;
-  margin-bottom: 20px;
+  padding: 0;
 }
 
-.calendar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
 
-.calendar-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
-}
 
 .calendar-controls {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
+  padding: 20px 20px 0 20px;
 }
 
 .nav-button {
@@ -288,6 +321,17 @@ onMounted(() => {
 .nav-button:hover {
   background-color: #f0f0f0;
   color: #333;
+}
+
+.nav-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: #ccc;
+}
+
+.nav-button:disabled:hover {
+  background-color: transparent;
+  color: #ccc;
 }
 
 .current-month {
@@ -372,11 +416,7 @@ onMounted(() => {
   border-color: transparent;
 }
 
-.day-cell.today {
-  background-color: #e3f2fd;
-  border-color: #2196F3;
-  font-weight: 600;
-}
+
 
 .day-cell.has-transactions {
   background-color: #fff3e0;
@@ -391,6 +431,26 @@ onMounted(() => {
 .day-cell.negative-balance {
   background-color: #ffebee;
   border-color: #f44336;
+}
+
+.day-cell.disabled {
+  background-color: #f5f5f5;
+  color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.day-cell.disabled:hover {
+  background-color: #f5f5f5;
+  border-color: transparent;
+}
+
+.day-cell.disabled .day-number {
+  color: #ccc;
+}
+
+.day-cell.disabled .day-amount {
+  color: #ccc;
 }
 
 .day-number {
@@ -423,60 +483,18 @@ onMounted(() => {
   color: #666;
 }
 
-.calendar-legend {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #eee;
-}
 
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #666;
-}
-
-.legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid #ddd;
-}
-
-.legend-color.positive {
-  background-color: #e8f5e9;
-  border-color: #4CAF50;
-}
-
-.legend-color.negative {
-  background-color: #ffebee;
-  border-color: #f44336;
-}
-
-.legend-color.today {
-  background-color: #e3f2fd;
-  border-color: #2196F3;
-}
 
 /* Mobile responsive */
 @media (max-width: 768px) {
   .transaction-calendar {
-    padding: 16px;
-  }
-  
-  .calendar-header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
+    padding: 0;
   }
   
   .calendar-controls {
     width: 100%;
     justify-content: space-between;
+    padding: 16px 16px 0 16px;
   }
   
   .current-month {
@@ -496,16 +514,16 @@ onMounted(() => {
     font-size: 9px;
   }
   
-  .calendar-legend {
-    flex-direction: column;
-    gap: 8px;
-    align-items: center;
-  }
+
 }
 
 @media (max-width: 480px) {
   .transaction-calendar {
-    padding: 12px;
+    padding: 0;
+  }
+  
+  .calendar-controls {
+    padding: 12px 12px 0 12px;
   }
   
   .calendar-cell {

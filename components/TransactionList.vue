@@ -37,13 +37,20 @@
          <button @click="setQuickFilter('month')" class="filter-chip" :class="{ active: quickFilter === 'month' }">
            Tháng này
          </button>
-         <button @click="toggleCustomDateFilter" class="filter-chip" :class="{ active: quickFilter === 'custom' }">
-           Tùy chọn
+         <button @click="toggleCustomDateFilter" class="filter-chip" :class="{ active: quickFilter === 'custom' }" :title="quickFilter === 'custom' && startDate && endDate ? `${formatDateForDisplay(startDate)} - ${formatDateForDisplay(endDate)}` : 'Tùy chọn'">
+           <span v-if="quickFilter === 'custom' && startDate && endDate" class="custom-date-range">
+             <span class="date-range-text">{{ formatDateForDisplay(startDate) }} - {{ formatDateForDisplay(endDate) }}</span>
+             <span class="date-range-short">{{ formatDateShort(startDate) }} - {{ formatDateShort(endDate) }}</span>
+           </span>
+           <span v-else>Tùy chọn</span>
          </button>
        </div>
        
        <!-- Custom Date Filter Panel -->
        <div v-if="showCustomDateFilter" class="custom-date-panel">
+         <div class="custom-date-header">
+           <h4>Chọn khoảng thời gian tùy chỉnh</h4>
+         </div>
          <div class="custom-date-inputs">
            <div class="date-input-group">
              <label>Từ ngày:</label>
@@ -55,8 +62,11 @@
            </div>
          </div>
          <div class="custom-date-actions">
-           <button @click="applyCustomFilter" class="apply-button">Áp dụng</button>
-           <button @click="closeCustomDateFilter" class="cancel-button">Hủy</button>
+           <button @click="applyCustomFilter" class="apply-button" :disabled="loading">
+             <span v-if="loading">Đang áp dụng...</span>
+             <span v-else>Áp dụng</span>
+           </button>
+           <button @click="closeCustomDateFilter" class="cancel-button" :disabled="loading">Hủy</button>
          </div>
        </div>
      </div>
@@ -125,68 +135,107 @@
     </div>
 
     <!-- Transaction Calendar -->
-    <TransactionCalendar 
-      :transactions="transactions"
-      @date-selected="handleDateSelected"
-    />
+    <div v-if="shouldShowCalendar" class="calendar-section">
+      <div class="calendar-header" @click="toggleCalendar">
+        <div class="calendar-title-section">
+          <h3>Lịch chi tiêu</h3>
+          <span v-if="startDate && endDate" class="date-range-label">
+            (Từ {{ formatDateForDisplay(startDate) }} đến {{ formatDateForDisplay(endDate) }})
+          </span>
+        </div>
+        <svg 
+          class="calendar-toggle-icon" 
+          :class="{ 'rotated': showCalendar }"
+          width="20" height="20" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          stroke-width="2"
+        >
+          <polyline points="6,9 12,15 18,9"></polyline>
+        </svg>
+      </div>
+      <div v-if="showCalendar" class="calendar-content">
 
-    <!-- Daily Summary Table -->
-    <div v-if="transactions.length > 0" class="daily-summary-section">
-      <div class="daily-summary-header">
-        <h3>Tổng quan theo ngày</h3>
+        <TransactionCalendar 
+          ref="calendarRef"
+          :transactions="transactions"
+          :filter-start-date="startDate"
+          :filter-end-date="endDate"
+          @date-selected="handleDateSelected"
+        />
+      </div>
+    </div>
+
+    <!-- Monthly Overview Section -->
+    <div v-if="transactions.length > 0 && shouldShowMonthlyOverview" class="monthly-overview-section">
+      <div class="monthly-overview-header">
+        <h3>Tổng quan theo tháng</h3>
         <div class="summary-stats">
           <span class="stat-item">
-            <span class="stat-label">Tổng ngày:</span>
-            <span class="stat-value">{{ dailySummary.length }}</span>
-          </span>
-          <span class="stat-item">
-            <span class="stat-label">Cao nhất:</span>
-            <span class="stat-value">{{ formatCurrency(maxDailyAmount) }}</span>
+            <span class="stat-label">Tổng tháng:</span>
+            <span class="stat-value">{{ monthlySummary.length }}</span>
           </span>
         </div>
       </div>
       
-      <div class="daily-summary-table">
+      <div class="monthly-overview-table">
         <div class="table-header">
-          <div class="header-cell date-col">Ngày</div>
+          <div class="header-cell date-col">Tháng</div>
           <div class="header-cell income-col">Thu nhập</div>
           <div class="header-cell expense-col">Chi tiêu</div>
-          <div class="header-cell balance-col">Số dư</div>
+          <div class="header-cell balance-col">Cân bằng</div>
+          <div class="header-cell avg-col">Trung bình/ngày</div>
         </div>
         
         <div class="table-body">
           <div 
-            v-for="day in dailySummary" 
-            :key="day.date" 
+            v-for="month in monthlySummary" 
+            :key="month.monthKey" 
             class="table-row"
-            :class="{ 'today': day.isToday, 'highlight': day.balance > 0 }"
+            :class="{ 'highlight': month.balance > 0 }"
           >
             <div class="table-cell date-col">
               <div class="date-info">
-                <div class="date-label">{{ formatDateLabel(day.date) }}</div>
-                <div class="date-subtitle">{{ formatDateSubtitle(day.date) }}</div>
+                <div class="date-label">{{ formatMonthLabel(month.monthKey) }}</div>
+                <div class="date-subtitle">{{ month.daysCount }} ngày</div>
               </div>
             </div>
             <div class="table-cell income-col">
-              <span v-if="day.income > 0" class="amount income">
-                +{{ formatCurrency(day.income) }}
+              <span v-if="month.income > 0" class="amount income">
+                +{{ formatCurrency(month.income) }}
               </span>
               <span v-else class="amount zero">-</span>
             </div>
             <div class="table-cell expense-col">
-              <span v-if="day.expense > 0" class="amount expense">
-                -{{ formatCurrency(day.expense) }}
+              <span v-if="month.expense > 0" class="amount expense">
+                -{{ formatCurrency(month.expense) }}
               </span>
               <span v-else class="amount zero">-</span>
             </div>
             <div class="table-cell balance-col">
-              <span class="amount" :class="{ 'positive': day.balance >= 0, 'negative': day.balance < 0 }">
-                {{ formatCurrency(day.balance) }}
+              <span class="amount" :class="{ 'positive': month.balance >= 0, 'negative': month.balance < 0 }">
+                {{ formatCurrency(month.balance) }}
+              </span>
+            </div>
+            <div class="table-cell avg-col">
+              <span class="amount" :class="{ 'positive': month.avgPerDay >= 0, 'negative': month.avgPerDay < 0 }">
+                {{ formatCurrency(month.avgPerDay) }}
               </span>
             </div>
           </div>
         </div>
       </div>
+
+                           <!-- Monthly Charts Section -->
+        <div class="monthly-charts-section">
+                  <h4 class="chart-title">Biểu đồ thu chi theo tháng</h4>
+         <div class="chart-container">
+           <div class="chart-wrapper-outer">
+             <MonthlyChart :monthly-data="monthlySummary" />
+           </div>
+          </div>
+        </div>
     </div>
 
     <div class="transactions-summary">
@@ -430,6 +479,7 @@ import { db, auth } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
 import { onAuthStateChanged } from 'firebase/auth';
 import TransactionCalendar from '~/components/TransactionCalendar.vue';
+import MonthlyChart from '~/components/MonthlyChart.vue';
 
 const { user } = useAuth();
 const loading = ref(false);
@@ -447,6 +497,9 @@ const quickFilter = ref('today'); // 'today', 'week', 'month', 'custom'
 
 // Custom date filter state
 const showCustomDateFilter = ref(false);
+
+// State để quản lý hiển thị lịch chi tiêu
+const showCalendar = ref(false);
 
 // Touch/swipe state
 const touchStartX = ref(0);
@@ -472,6 +525,9 @@ const categoriesLoading = ref(false);
 // State cho daily transactions modal
 const showDailyTransactionsModal = ref(false);
 const selectedDay = ref(null);
+
+// Ref cho calendar component
+const calendarRef = ref(null);
 
 // Định nghĩa tên tiếng Việt cho các danh mục
 const categoryNames = {
@@ -611,6 +667,91 @@ const maxDailyAmount = computed(() => {
   return Math.max(maxIncome, maxExpense, maxBalance);
 });
 
+// Computed properties for monthly overview
+const monthlySummary = computed(() => {
+  const monthlyData = {};
+  
+  // Group transactions by month
+  transactions.value.forEach(transaction => {
+    const date = new Date(transaction.date);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    
+    if (!monthlyData[monthKey]) {
+      monthlyData[monthKey] = {
+        monthKey,
+        income: 0,
+        expense: 0,
+        balance: 0,
+        daysCount: 0,
+        avgPerDay: 0
+      };
+    }
+    
+    const amount = typeof transaction.amount === 'number' 
+      ? transaction.amount 
+      : parseFloat(String(transaction.amount).replace(/[^\d.-]/g, '')) || 0;
+    
+    if (transaction.type === 'income') {
+      monthlyData[monthKey].income += amount;
+    } else {
+      monthlyData[monthKey].expense += amount;
+    }
+  });
+  
+  // Calculate balance, days count, and average per day
+  Object.keys(monthlyData).forEach(monthKey => {
+    const month = monthlyData[monthKey];
+    month.balance = month.income - month.expense;
+    
+    // Calculate days in this month that have transactions
+    const monthStart = new Date(monthKey + '-01');
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    const daysInMonth = monthEnd.getDate();
+    
+    // Count days with transactions
+    const daysWithTransactions = new Set();
+    transactions.value.forEach(transaction => {
+      const date = new Date(transaction.date);
+      const transactionMonthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (transactionMonthKey === monthKey) {
+        daysWithTransactions.add(date.getDate());
+      }
+    });
+    
+    month.daysCount = daysWithTransactions.size;
+    month.avgPerDay = month.daysCount > 0 ? month.balance / month.daysCount : 0;
+  });
+  
+  // Sort by month (newest first)
+  return Object.values(monthlyData).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+});
+
+const maxMonthlyAmount = computed(() => {
+  if (monthlySummary.value.length === 0) return 0;
+  
+  const maxIncome = Math.max(...monthlySummary.value.map(month => month.income));
+  const maxExpense = Math.max(...monthlySummary.value.map(month => month.expense));
+  
+  return Math.max(maxIncome, maxExpense);
+});
+
+
+
+// Check if should show monthly overview (custom filter > 2 months)
+const shouldShowMonthlyOverview = computed(() => {
+  if (quickFilter.value !== 'custom') return false;
+  
+  if (!startDate.value || !endDate.value) return false;
+  
+  const start = new Date(startDate.value);
+  const end = new Date(endDate.value);
+  
+  // Calculate months difference
+  const monthsDiff = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  
+  return monthsDiff >= 2; // Show if 2 or more months
+});
+
 // Computed properties for selected day modal
 const selectedDayIncome = computed(() => {
   if (!selectedDay.value?.transactions) return 0;
@@ -637,6 +778,16 @@ const selectedDayExpense = computed(() => {
       return sum + amount;
     }, 0);
 });
+
+// Computed property để kiểm tra có nên hiển thị lịch không
+const shouldShowCalendar = computed(() => {
+  return ['week', 'month', 'custom'].includes(quickFilter.value);
+});
+
+// Hàm toggle lịch chi tiêu
+const toggleCalendar = () => {
+  showCalendar.value = !showCalendar.value;
+};
 
 // Hàm định dạng tiền VND
 const formatCurrency = (amount) => {
@@ -669,6 +820,16 @@ function formatDateForInput(date) {
   return [year, month, day].join('-');
 }
 
+// Hàm định dạng ngày cho hiển thị trong tiếng Việt
+const formatDateForDisplay = (dateString) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+};
+
 // Hàm định dạng nhãn ngày cho tree view
 const formatDateLabel = (dateString) => {
   const date = new Date(dateString);
@@ -699,6 +860,28 @@ const formatDateSubtitle = (dateString) => {
     year: 'numeric'
   });
 };
+
+// Hàm định dạng nhãn tháng cho monthly overview
+const formatMonthLabel = (monthKey) => {
+  const [year, month] = monthKey.split('-');
+  return `${month}/${year}`;
+};
+
+// Hàm định dạng tháng ngắn cho biểu đồ
+const formatMonthShort = (monthKey) => {
+  const [year, month] = monthKey.split('-');
+  return `${month}/${year.slice(-2)}`;
+};
+
+// Hàm định dạng ngày ngắn cho mobile
+const formatDateShort = (dateString) => {
+  const date = new Date(dateString);
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  return `${day}/${month}`;
+};
+
+
 
 // Hàm định dạng thời gian cho modal
 const formatTime = (timestamp) => {
@@ -736,6 +919,8 @@ const setQuickFilter = (filter) => {
     case 'today':
       startDate.value = formatDateForInput(today);
       endDate.value = formatDateForInput(today);
+      // Ẩn lịch khi chọn "Hôm nay"
+      showCalendar.value = false;
       break;
     case 'week':
       const weekStart = new Date(today);
@@ -744,15 +929,37 @@ const setQuickFilter = (filter) => {
       weekEnd.setDate(weekStart.getDate() + 6);
       startDate.value = formatDateForInput(weekStart);
       endDate.value = formatDateForInput(weekEnd);
+      // Tự động mở lịch khi chọn "Tuần này"
+      showCalendar.value = true;
+      // Navigate calendar to the week's start month
+      if (calendarRef.value) {
+        calendarRef.value.navigateToMonth(weekStart.getMonth(), weekStart.getFullYear());
+      }
       break;
     case 'month':
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
       startDate.value = formatDateForInput(monthStart);
       endDate.value = formatDateForInput(monthEnd);
+      // Tự động mở lịch khi chọn "Tháng này"
+      showCalendar.value = true;
+      // Navigate calendar to the current month
+      if (calendarRef.value) {
+        calendarRef.value.navigateToMonth(monthStart.getMonth(), monthStart.getFullYear());
+      }
       break;
     case 'custom':
-      // Keep current dates
+      // Set default to last 3 months
+      const threeMonthsAgo = new Date(today);
+      threeMonthsAgo.setMonth(today.getMonth() - 3);
+      startDate.value = formatDateForInput(threeMonthsAgo);
+      endDate.value = formatDateForInput(today);
+      // Tự động mở lịch khi chọn "Tùy chọn"
+      showCalendar.value = true;
+      // Navigate calendar to the start month of the selected range
+      if (calendarRef.value) {
+        calendarRef.value.navigateToMonth(threeMonthsAgo.getMonth(), threeMonthsAgo.getFullYear());
+      }
       break;
   }
 
@@ -761,15 +968,31 @@ const setQuickFilter = (filter) => {
 
 // Custom date filter functions
 const toggleCustomDateFilter = () => {
+  console.log('toggleCustomDateFilter called, current state:', showCustomDateFilter.value);
   showCustomDateFilter.value = !showCustomDateFilter.value;
+  console.log('showCustomDateFilter is now:', showCustomDateFilter.value);
+  
   if (showCustomDateFilter.value) {
     quickFilter.value = 'custom';
+    // Set default to last 3 months but don't apply filter yet
+    const today = new Date();
+    const threeMonthsAgo = new Date(today);
+    threeMonthsAgo.setMonth(today.getMonth() - 3);
+    startDate.value = formatDateForInput(threeMonthsAgo);
+    endDate.value = formatDateForInput(today);
+    console.log('Set default dates:', startDate.value, 'to', endDate.value);
+    // Tự động mở lịch khi chọn "Tùy chọn"
+    showCalendar.value = true;
+    // Navigate calendar to the start month of the selected range
+    if (calendarRef.value) {
+      calendarRef.value.navigateToMonth(threeMonthsAgo.getMonth(), threeMonthsAgo.getFullYear());
+    }
   }
 };
 
 const closeCustomDateFilter = () => {
   showCustomDateFilter.value = false;
-  // Reset to previous filter if needed
+  // Reset to today filter if currently on custom
   if (quickFilter.value === 'custom') {
     quickFilter.value = 'today';
     setQuickFilter('today');
@@ -778,11 +1001,47 @@ const closeCustomDateFilter = () => {
 
 const setCustomFilter = () => {
   quickFilter.value = 'custom';
+  // Don't fetch transactions immediately, wait for user to click "Áp dụng"
 };
 
 const applyCustomFilter = () => {
+  console.log('applyCustomFilter called');
+  
+  // Validate dates
+  if (!startDate.value || !endDate.value) {
+    console.error('Start date or end date is missing');
+    alert('Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc');
+    return;
+  }
+  
+  const start = new Date(startDate.value);
+  const end = new Date(endDate.value);
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    console.error('Invalid date format');
+    alert('Định dạng ngày không hợp lệ');
+    return;
+  }
+  
+  if (start > end) {
+    console.error('Start date cannot be after end date');
+    alert('Ngày bắt đầu không thể sau ngày kết thúc');
+    return;
+  }
+  
   showCustomDateFilter.value = false;
+  // Tự động mở lịch khi áp dụng filter tùy chọn
+  showCalendar.value = true;
+  // Ensure the filter is set to custom
+  quickFilter.value = 'custom';
+  console.log('Applying custom filter with dates:', startDate.value, 'to', endDate.value);
   fetchTransactions();
+  
+  // Navigate calendar to the start month of the selected range
+  if (calendarRef.value && startDate.value) {
+    const startDateObj = new Date(startDate.value);
+    calendarRef.value.navigateToMonth(startDateObj.getMonth(), startDateObj.getFullYear());
+  }
 };
 
 // View mode toggle
@@ -795,12 +1054,16 @@ const handleDateSelected = (day) => {
   // Show modal with day's transactions (don't change main list filters)
   selectedDay.value = day;
   showDailyTransactionsModal.value = true;
+  // Disable body scroll when modal opens
+  document.body.style.overflow = 'hidden';
 };
 
 // Close daily transactions modal
 const closeDailyTransactionsModal = () => {
   showDailyTransactionsModal.value = false;
   selectedDay.value = null;
+  // Re-enable body scroll
+  document.body.style.overflow = '';
 };
 
 // Touch/swipe handlers
@@ -1223,9 +1486,26 @@ watch([startDate, endDate, transactionType], async (newValues, oldValues) => {
   }
 }, { deep: true });
 
+// Watch for modal state changes to manage body scroll
+watch(showDailyTransactionsModal, (isOpen) => {
+  if (isOpen) {
+    // Disable body scroll when modal opens
+    document.body.style.overflow = 'hidden';
+  } else {
+    // Re-enable body scroll when modal closes
+    document.body.style.overflow = '';
+  }
+});
+
 // Expose the refreshData method
 defineExpose({
   refreshData
+});
+
+// Cleanup function to restore body scroll when component unmounts
+onUnmounted(() => {
+  // Restore body scroll when component unmounts
+  document.body.style.overflow = '';
 });
 </script>
 
@@ -1437,10 +1717,9 @@ defineExpose({
   padding: 10px 0;
   background-color: #f9f9f9;
   border-radius: 6px;
-  overflow-x: auto;
-  /* Allow horizontal scrolling for chips */
-  -webkit-overflow-scrolling: touch;
-  /* Smooth scrolling on iOS */
+  overflow-x: hidden;
+  /* Prevent horizontal scrolling */
+  width: 100%;
 }
 
 .quick-filter-chips {
@@ -1460,6 +1739,24 @@ defineExpose({
   white-space: nowrap;
   color: #333;
   font-weight: 500;
+  min-width: 80px;
+  text-align: center;
+  max-width: 200px;
+  overflow: hidden;
+}
+
+.custom-date-range {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.date-range-text {
+  display: block;
+}
+
+.date-range-short {
+  display: none;
 }
 
 .filter-chip:hover {
@@ -1480,6 +1777,18 @@ defineExpose({
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   border: 1px solid #e0e0e0;
   animation: slideDown 0.3s ease-out;
+}
+
+.custom-date-header {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.custom-date-header h4 {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 @keyframes slideDown {
@@ -1550,6 +1859,17 @@ defineExpose({
   transform: translateY(-1px);
 }
 
+.apply-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.apply-button:disabled:hover {
+  background-color: #cccccc;
+  transform: none;
+}
+
 .custom-date-actions .cancel-button {
   padding: 8px 16px;
   background-color: #f5f5f5;
@@ -1565,6 +1885,18 @@ defineExpose({
 .custom-date-actions .cancel-button:hover {
   background-color: #e0e0e0;
   transform: translateY(-1px);
+}
+
+.custom-date-actions .cancel-button:disabled {
+  background-color: #f0f0f0;
+  color: #999;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.custom-date-actions .cancel-button:disabled:hover {
+  background-color: #f0f0f0;
+  transform: none;
 }
 
 .mobile-type-filter {
@@ -1723,7 +2055,239 @@ defineExpose({
   color: #FF9800;
 }
 
-/* Daily Summary Table Styles */
+/* Calendar Section Styles */
+.calendar-section {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #dee2e6;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.calendar-header:hover {
+  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+}
+
+.calendar-title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calendar-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.date-range-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 400;
+}
+
+.calendar-toggle-icon {
+  transition: transform 0.3s ease;
+  color: #666;
+}
+
+.calendar-toggle-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.calendar-content {
+  padding: 0;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Monthly Overview Table Styles */
+.monthly-overview-section {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+}
+
+.monthly-overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 1px solid #dee2e6;
+}
+
+.monthly-overview-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.monthly-overview-table {
+  overflow-x: auto;
+}
+
+.monthly-overview-table .table-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+  font-weight: 600;
+  color: #495057;
+  font-size: 14px;
+  text-align: center;
+}
+
+.monthly-overview-table .table-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.monthly-overview-table .table-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e9ecef;
+  transition: all 0.2s ease;
+  align-items: center;
+  text-align: center;
+}
+
+.monthly-overview-table .table-row:hover {
+  background: #f8f9fa;
+}
+
+.monthly-overview-table .table-row.highlight {
+  background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%);
+}
+
+.monthly-overview-table .table-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  padding: 8px 4px;
+  border-right: 1px solid #f1f3f4;
+}
+
+.monthly-overview-table .table-cell:last-child {
+  border-right: none;
+}
+
+.monthly-overview-table .date-col {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.monthly-overview-table .date-label {
+  font-weight: 600;
+  color: #333;
+  font-size: 15px;
+}
+
+.monthly-overview-table .date-subtitle {
+  font-size: 12px;
+  color: #666;
+}
+
+.monthly-overview-table .amount {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.monthly-overview-table .amount.income {
+  color: #2E7D32;
+}
+
+.monthly-overview-table .amount.expense {
+  color: #c62828;
+}
+
+.monthly-overview-table .amount.positive {
+  color: #2E7D32;
+}
+
+.monthly-overview-table .amount.negative {
+  color: #c62828;
+}
+
+.monthly-overview-table .amount.zero {
+  color: #999;
+  font-weight: 400;
+}
+
+/* Monthly Charts Section */
+.monthly-charts-section {
+  padding: 20px;
+  background: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+}
+
+.chart-title {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+}
+
+.monthly-charts-section h4 {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+}
+
+.chart-container {
+  background: white;
+  border-radius: 8px;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.chart-wrapper-outer {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Daily Summary Table Styles (keeping for reference) */
 .daily-summary-section {
   background: white;
   border-radius: 12px;
@@ -1816,10 +2380,7 @@ defineExpose({
   background-color: #f8f9fa;
 }
 
-.table-row.today {
-  background-color: #e3f2fd;
-  border-left: 4px solid #2196F3;
-}
+
 
 .table-row.highlight {
   background-color: #e8f5e9;
@@ -1935,6 +2496,161 @@ defineExpose({
   
   .table-body {
     max-height: 300px;
+  }
+  
+  /* Calendar responsive */
+  .calendar-header {
+    padding: 12px 16px;
+  }
+  
+  .calendar-header h3 {
+    font-size: 16px;
+  }
+  
+  .date-range-label {
+    font-size: 12px;
+  }
+  
+  .calendar-content {
+    padding: 0;
+  }
+  
+  /* Monthly overview responsive */
+  .monthly-overview-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .monthly-overview-table .table-header {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+  }
+  
+  .monthly-overview-table .table-row {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;
+    gap: 8px;
+    padding: 12px 16px;
+  }
+  
+  .monthly-overview-table .table-cell {
+    font-size: 12px;
+    padding: 6px 2px;
+  }
+  
+  .monthly-overview-table .date-label {
+    font-size: 13px;
+  }
+  
+  .monthly-overview-table .date-subtitle {
+    font-size: 10px;
+  }
+  
+  .monthly-overview-table .amount {
+    font-size: 12px;
+  }
+  
+  .monthly-charts-section {
+    padding: 16px;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  .chart-wrapper-outer {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 480px) {
+  .daily-summary-header {
+    padding: 12px 16px;
+  }
+  
+  .daily-summary-header h3 {
+    font-size: 16px;
+  }
+  
+  .table-header {
+    grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  }
+  
+  .table-row {
+    grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  }
+  
+  .table-cell {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  
+  .date-label {
+    font-size: 12px;
+  }
+  
+  .date-subtitle {
+    font-size: 10px;
+  }
+  
+  .amount {
+    font-size: 12px;
+  }
+  
+  /* Monthly overview extra small mobile */
+  .monthly-overview-header {
+    padding: 12px 16px;
+  }
+  
+  .monthly-overview-header h3 {
+    font-size: 16px;
+  }
+  
+  .monthly-overview-table .table-header {
+    grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
+    gap: 4px;
+    padding: 8px 12px;
+    font-size: 10px;
+  }
+  
+  .monthly-overview-table .table-row {
+    grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
+    gap: 4px;
+    padding: 8px 12px;
+  }
+  
+  .monthly-overview-table .table-cell {
+    font-size: 10px;
+    padding: 4px 1px;
+  }
+  
+  .monthly-overview-table .date-label {
+    font-size: 11px;
+  }
+  
+  .monthly-overview-table .date-subtitle {
+    font-size: 9px;
+  }
+  
+  .monthly-overview-table .amount {
+    font-size: 10px;
+  }
+  
+  .monthly-charts-section {
+    padding: 12px;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  .chart-wrapper-outer {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
   }
 }
 
@@ -2343,6 +3059,8 @@ defineExpose({
     /* Show on mobile */
     margin-bottom: 12px;
     padding: 8px 0;
+    overflow-x: hidden;
+    width: 100%;
   }
 
   .mobile-type-filter {
@@ -2355,11 +3073,25 @@ defineExpose({
   .quick-filter-chips {
     gap: 6px;
     padding: 0 8px;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .filter-chip {
     padding: 5px 10px;
     font-size: 12px;
+    min-width: 70px;
+    text-align: center;
+    max-width: 120px;
+  }
+
+  .date-range-text {
+    display: none;
+  }
+
+  .date-range-short {
+    display: block;
+    font-size: 11px;
   }
 
   .type-tabs {
@@ -2377,6 +3109,10 @@ defineExpose({
    .custom-date-panel {
      margin-top: 8px;
      padding: 12px;
+   }
+
+   .custom-date-header h4 {
+     font-size: 14px;
    }
 
    .custom-date-inputs {
@@ -2941,12 +3677,19 @@ defineExpose({
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
 .daily-transactions-modal .modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+  /* Ensure smooth scrolling on mobile */
+  -webkit-overflow-scrolling: touch;
+  /* Prevent horizontal scroll */
+  overflow-x: hidden;
 }
 
 .daily-summary-stats {
@@ -3195,6 +3938,22 @@ defineExpose({
   .transaction-amount {
     font-size: 13px;
     min-width: 70px;
+  }
+
+  .filter-chip {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-width: 60px;
+    max-width: 100px;
+  }
+
+  .date-range-short {
+    font-size: 10px;
+  }
+
+  .quick-filter-chips {
+    gap: 4px;
+    padding: 0 4px;
   }
 }
 </style>

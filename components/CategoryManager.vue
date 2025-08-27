@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore';
 import { db } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
@@ -359,6 +359,23 @@ const closeModal = () => {
   emit('categories-updated');
 };
 
+// Watch for modal state changes to manage body scroll
+watch(showModal, (isOpen) => {
+  if (isOpen) {
+    // Disable body scroll when modal opens
+    document.body.style.overflow = 'hidden';
+  } else {
+    // Re-enable body scroll when modal closes
+    document.body.style.overflow = '';
+  }
+});
+
+// Cleanup function to restore body scroll when component unmounts
+onUnmounted(() => {
+  // Restore body scroll when component unmounts
+  document.body.style.overflow = '';
+});
+
 // Expose methods
 defineExpose({
   openModal,
@@ -390,7 +407,10 @@ defineExpose({
   width: 90%;
   max-width: 600px;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
 .modal-header {
@@ -418,6 +438,12 @@ defineExpose({
 
 .modal-body {
   padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  /* Ensure smooth scrolling on mobile */
+  -webkit-overflow-scrolling: touch;
+  /* Prevent horizontal scroll */
+  overflow-x: hidden;
 }
 
 .add-category-form {

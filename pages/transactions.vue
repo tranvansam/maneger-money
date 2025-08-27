@@ -135,7 +135,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, watch, nextTick, computed, onUnmounted } from 'vue';
 import { collection, addDoc, query, getDocs, where, updateDoc, doc } from 'firebase/firestore';
 import { db } from '~/plugins/firebase';
 import { useAuth } from '~/composables/useAuth';
@@ -234,6 +234,12 @@ watch(() => showAddTransactionModal.value, async (isOpen) => {
         ? currentDefaultIncome.value 
         : currentDefaultExpense.value;
     }
+    
+    // Disable body scroll when modal opens
+    document.body.style.overflow = 'hidden';
+  } else {
+    // Re-enable body scroll when modal closes
+    document.body.style.overflow = '';
   }
 });
 
@@ -558,6 +564,12 @@ onMounted(() => {
   fetchCategories();
 });
 
+// Cleanup function to restore body scroll when component unmounts
+onUnmounted(() => {
+  // Restore body scroll when component unmounts
+  document.body.style.overflow = '';
+});
+
 // Watch cho user authentication status - với immediate: false để tránh chạy ngay
 watch(user, (newUser) => {
   console.log("User auth state changed in transactions page:", newUser?.uid);
@@ -835,6 +847,7 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
 .modal-header {
@@ -876,6 +889,10 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   padding: 20px;
   overflow-y: auto;
   flex: 1;
+  /* Ensure smooth scrolling on mobile */
+  -webkit-overflow-scrolling: touch;
+  /* Prevent horizontal scroll */
+  overflow-x: hidden;
 }
 
 .form-group {
