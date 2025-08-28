@@ -224,6 +224,21 @@ const userInitials = computed(() => {
   justify-content: space-between;
   padding: 20px;
   border-bottom: 1px solid #eee;
+  /* Fix cho iPhone có notch */
+  padding-top: calc(20px + env(safe-area-inset-top));
+  position: relative;
+}
+
+/* Tạo vùng màu nền phía trên sidebar header cho iPhone có notch */
+.sidebar-header::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  background-color: #fff;
+  z-index: -1;
 }
 
 .app-title {
@@ -338,6 +353,9 @@ const userInitials = computed(() => {
   z-index: 1500;
   justify-content: space-around;
   align-items: center;
+  /* Fix cho iPhone có notch */
+  padding-bottom: env(safe-area-inset-bottom);
+  height: calc(60px + env(safe-area-inset-bottom));
 }
 
 .mobile-nav-item {
@@ -446,7 +464,7 @@ const userInitials = computed(() => {
   
   /* Add padding to main content to account for mobile nav bar */
   .sidebar-content {
-    padding-bottom: 70px;
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
   }
 }
 
