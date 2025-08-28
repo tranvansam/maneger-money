@@ -848,6 +848,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   display: flex;
   flex-direction: column;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+  position: relative;
 }
 
 .modal-header {
@@ -857,6 +859,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   padding: 16px 20px;
   border-bottom: 1px solid #eee;
   transition: all 0.3s ease;
+  flex-shrink: 0;
+  z-index: 10;
 }
 
 .modal-header.income-header {
@@ -893,10 +897,16 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   -webkit-overflow-scrolling: touch;
   /* Prevent horizontal scroll */
   overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  max-height: calc(90vh - 140px); /* Trừ đi chiều cao của header và footer */
 }
 
 .form-group {
   margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-group label {
@@ -915,6 +925,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .form-group select {
@@ -998,6 +1010,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   position: sticky;
   bottom: 0;
   box-shadow: 0 -1px 5px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  z-index: 10;
 }
 
 .cancel-button {
@@ -1063,6 +1077,9 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
     max-width: none;
     margin: 10px;
     border-radius: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+    max-height: calc(100vh - 20px);
   }
   
   .modal-header {
@@ -1075,6 +1092,9 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   
   .modal-body {
     padding: 16px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
   .form-group {
@@ -1091,6 +1111,9 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   .form-group select {
     padding: 12px;
     font-size: 16px; /* Prevent zoom on iOS */
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow: hidden;
   }
   
   .radio-group {
@@ -1228,10 +1251,28 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   display: flex;
   gap: 10px;
   align-items: center;
+  width: 100%;
 }
 
 .category-select select {
   flex: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Đảm bảo dropdown options không bị tràn */
+.category-select select option {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Đảm bảo optgroup không bị tràn */
+.category-select select optgroup {
+  max-width: 100%;
 }
 
 .manage-categories-button {

@@ -47,7 +47,7 @@
        </div>
        
        <!-- Custom Date Filter Panel -->
-       <div v-if="showCustomDateFilter" class="custom-date-panel">
+       <div v-if="showCustomDateFilter" ref="customDateFilterRef" class="custom-date-panel" @click="handleDropdownClick">
          <div class="custom-date-header">
            <h4>Chọn khoảng thời gian tùy chỉnh</h4>
          </div>
@@ -497,6 +497,8 @@ const quickFilter = ref('today'); // 'today', 'week', 'month', 'custom'
 
 // Custom date filter state
 const showCustomDateFilter = ref(false);
+const customDateFilterRef = ref(null);
+const isToggleButtonClicked = ref(false);
 
 // State để quản lý hiển thị lịch chi tiêu
 const showCalendar = ref(false);
@@ -969,6 +971,10 @@ const setQuickFilter = (filter) => {
 // Custom date filter functions
 const toggleCustomDateFilter = () => {
   console.log('toggleCustomDateFilter called, current state:', showCustomDateFilter.value);
+  
+  // Set flag to prevent immediate closing
+  isToggleButtonClicked.value = true;
+  
   showCustomDateFilter.value = !showCustomDateFilter.value;
   console.log('showCustomDateFilter is now:', showCustomDateFilter.value);
   
@@ -988,15 +994,23 @@ const toggleCustomDateFilter = () => {
       calendarRef.value.navigateToMonth(threeMonthsAgo.getMonth(), threeMonthsAgo.getFullYear());
     }
   }
+  
+  // Reset flag after a short delay
+  setTimeout(() => {
+    isToggleButtonClicked.value = false;
+  }, 100);
 };
 
 const closeCustomDateFilter = () => {
   showCustomDateFilter.value = false;
-  // Reset to today filter if currently on custom
-  if (quickFilter.value === 'custom') {
-    quickFilter.value = 'today';
-    setQuickFilter('today');
-  }
+  isToggleButtonClicked.value = false;
+  // Keep the quick filter on 'custom' when closing the dropdown
+  // Don't reset to 'today' filter
+};
+
+const handleDropdownClick = (event) => {
+  // Prevent the click from bubbling up to the document click handler
+  event.stopPropagation();
 };
 
 const setCustomFilter = () => {
@@ -1427,6 +1441,44 @@ onMounted(async () => {
       transactions.value = [];
     }
   });
+
+  // Add event listeners for closing dropdown when clicking outside or switching tabs
+  const handleClickOutside = (event) => {
+    // Don't close if the toggle button was just clicked
+    if (isToggleButtonClicked.value) {
+      return;
+    }
+    
+    if (showCustomDateFilter.value && customDateFilterRef.value && !customDateFilterRef.value.contains(event.target)) {
+      closeCustomDateFilter();
+    }
+  };
+
+
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Escape' && showCustomDateFilter.value) {
+      closeCustomDateFilter();
+    }
+  };
+
+  // Add event listeners
+  document.addEventListener('click', handleClickOutside);
+  document.addEventListener('keydown', handleKeyDown);
+
+  // Store cleanup functions
+  const cleanup = () => {
+    document.removeEventListener('click', handleClickOutside);
+  };
+
+  // Store cleanup functions for later use
+  const cleanupDropdownListeners = () => {
+    document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('keydown', handleKeyDown);
+  };
+
+  // Store cleanup function globally for onUnmounted
+  window.cleanupDropdownListeners = cleanupDropdownListeners;
 });
 
 // Đảm bảo unsubscribe khi component unmounted
@@ -1435,6 +1487,12 @@ onUnmounted(() => {
   if (authUnsubscribe) {
     authUnsubscribe();
     console.log("Auth listener unsubscribed");
+  }
+  
+  // Cleanup dropdown event listeners
+  if (window.cleanupDropdownListeners) {
+    window.cleanupDropdownListeners();
+    delete window.cleanupDropdownListeners;
   }
 });
 
