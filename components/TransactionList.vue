@@ -418,57 +418,59 @@
   </div>
 
   <!-- Daily Transactions Modal -->
-  <div v-if="showDailyTransactionsModal" class="modal-overlay" @click="closeDailyTransactionsModal">
-    <div class="modal daily-transactions-modal" @click.stop>
-      <div class="modal-header">
-        <h2>Chi tiết giao dịch ngày {{ formatDateLabel(selectedDay?.date) }}</h2>
-        <button @click="closeDailyTransactionsModal" class="close-button">&times;</button>
-      </div>
-      
-      <div class="modal-body">
-        <div v-if="selectedDay?.transactions?.length > 0" class="daily-transactions-list">
-                     <div class="daily-summary-stats">
-             <div class="stat-item">
-               <span class="stat-label">Thu nhập:</span>
-               <span class="stat-value income">+{{ formatCurrency(selectedDayIncome) }}</span>
+  <Teleport to="body">
+    <div v-if="showDailyTransactionsModal" class="modal-overlay" @click="closeDailyTransactionsModal">
+      <div class="modal daily-transactions-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Chi tiết giao dịch ngày {{ formatDateLabel(selectedDay?.date) }}</h2>
+          <button @click="closeDailyTransactionsModal" class="close-button">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+          <div v-if="selectedDay?.transactions?.length > 0" class="daily-transactions-list">
+                       <div class="daily-summary-stats">
+               <div class="stat-item">
+                 <span class="stat-label">Thu nhập:</span>
+                 <span class="stat-value income">+{{ formatCurrency(selectedDayIncome) }}</span>
+               </div>
+               <div class="stat-item">
+                 <span class="stat-label">Chi tiêu:</span>
+                 <span class="stat-value expense">-{{ formatCurrency(selectedDayExpense) }}</span>
+               </div>
+               <div class="stat-item">
+                 <span class="stat-label">Số dư:</span>
+                 <span class="stat-value" :class="{ 'positive': selectedDay.balance >= 0, 'negative': selectedDay.balance < 0 }">
+                   {{ formatCurrency(selectedDay.balance) }}
+                 </span>
+               </div>
              </div>
-             <div class="stat-item">
-               <span class="stat-label">Chi tiêu:</span>
-               <span class="stat-value expense">-{{ formatCurrency(selectedDayExpense) }}</span>
-             </div>
-             <div class="stat-item">
-               <span class="stat-label">Số dư:</span>
-               <span class="stat-value" :class="{ 'positive': selectedDay.balance >= 0, 'negative': selectedDay.balance < 0 }">
-                 {{ formatCurrency(selectedDay.balance) }}
-               </span>
-             </div>
-           </div>
-          
-          <div class="transactions-container">
-            <div 
-              v-for="transaction in selectedDay.transactions" 
-              :key="transaction.id"
-              class="transaction-item"
-            >
-              <div class="transaction-info">
-                <div class="transaction-description">{{ transaction.description || 'Không có mô tả' }}</div>
-                <div class="transaction-category">{{ getCategoryName(transaction.category) }}</div>
-                <div class="transaction-time">{{ formatTime(transaction.date) }}</div>
-              </div>
-              <div class="transaction-amount" :class="{ 'income': transaction.type === 'income', 'expense': transaction.type === 'expense' }">
-                {{ transaction.type === 'income' ? '+' : '-' }} {{ formatCurrency(transaction.amount) }}
+            
+            <div class="transactions-container">
+              <div 
+                v-for="transaction in selectedDay.transactions" 
+                :key="transaction.id"
+                class="transaction-item"
+              >
+                <div class="transaction-info">
+                  <div class="transaction-description">{{ transaction.description || 'Không có mô tả' }}</div>
+                  <div class="transaction-category">{{ getCategoryName(transaction.category) }}</div>
+                  <div class="transaction-time">{{ formatTime(transaction.date) }}</div>
+                </div>
+                <div class="transaction-amount" :class="{ 'income': transaction.type === 'income', 'expense': transaction.type === 'expense' }">
+                  {{ transaction.type === 'income' ? '+' : '-' }} {{ formatCurrency(transaction.amount) }}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        
-        <div v-else class="no-transactions">
-          <div class="no-transactions-icon">📅</div>
-          <p>Không có giao dịch nào trong ngày này</p>
+          
+          <div v-else class="no-transactions">
+            <div class="no-transactions-icon">📅</div>
+            <p>Không có giao dịch nào trong ngày này</p>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 
 </template>
 
@@ -3494,7 +3496,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
 }
 
 .modal {

@@ -28,103 +28,105 @@
       </div>
     </div>
     
-    <!-- Modal thêm chi tiêu -->
-    <div v-if="showAddTransactionModal" class="modal-overlay">
-      <div class="modal">
-        <div class="modal-header" :class="{ 'income-header': newTransaction.type === 'income', 'expense-header': newTransaction.type === 'expense' }">
-          <h2>{{ isEditMode ? 'Chỉnh sửa chi tiêu' : 'Thêm chi tiêu' }}</h2>
-          <button @click="closeModal" class="close-button">&times;</button>
-        </div>
-        
-        <div class="modal-body">
-          <form @submit.prevent="addTransaction">
-            <div class="form-group">
-              <label>Loại chi tiêu</label>
-              <div class="radio-group">
-                <label 
-                  class="radio-option" 
-                  :class="{ 'income': newTransaction.type === 'income' }"
-                >
-                  <input 
-                    type="radio" 
-                    v-model="newTransaction.type" 
-                    value="income"
-                  />
-                  <span>Thu nhập</span>
-                </label>
-                <label 
-                  class="radio-option" 
-                  :class="{ 'expense': newTransaction.type === 'expense' }"
-                >
-                  <input 
-                    type="radio" 
-                    v-model="newTransaction.type" 
-                    value="expense"
-                  />
-                  <span>Chi tiêu</span>
-                </label>
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label>Số tiền (VND) <span class="required">*</span></label>
-              <div class="amount-input">
-                <input 
-                  type="text" 
-                  v-model="formattedAmount" 
-                  @input="formatAmount" 
-                  @blur="validateAmount"
-                  required 
-                  placeholder="0" 
-                />
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label>Ngày</label>
-              <input type="date" v-model="newTransaction.date" required />
-            </div>
-            
-            <div class="form-group">
-              <label>Mô tả</label>
-              <input type="text" v-model="newTransaction.description" />
-            </div>
-            
-            <div class="form-group">
-              <label>Danh mục <span class="required">*</span></label>
-              <div class="category-select">
-                <select v-model="newTransaction.category" required>
-                  <option value="" disabled>Chọn danh mục</option>
-                  <optgroup v-if="newTransaction.type === 'income'" label="Thu nhập">
-                    <option v-for="cat in incomeCategories" :key="cat.id" :value="cat.id">
-                      {{ cat.name }}
-                    </option>
-                  </optgroup>
-                  <optgroup v-else label="Chi tiêu">
-                    <option v-for="cat in expenseCategories" :key="cat.id" :value="cat.id">
-                      {{ cat.name }}
-                    </option>
-                  </optgroup>
-                </select>
-                <button type="button" @click="openCategoryManager" class="manage-categories-icon" title="Quản lý danh mục">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-        
-        <div class="form-actions">
-          <button type="button" @click="closeModal" class="cancel-button">Hủy</button>
-          <button type="submit" @click="saveTransaction" class="submit-button" :disabled="modalLoading">
-            {{ modalLoading ? 'Đang xử lý...' : (isEditMode ? 'Cập nhật chi tiêu' : 'Lưu chi tiêu') }}
-          </button>
-        </div>
-      </div>
-    </div>
+         <!-- Modal thêm chi tiêu -->
+     <Teleport to="body">
+       <div v-if="showAddTransactionModal" class="modal-overlay">
+         <div class="modal">
+           <div class="modal-header" :class="{ 'income-header': newTransaction.type === 'income', 'expense-header': newTransaction.type === 'expense' }">
+             <h2>{{ isEditMode ? 'Chỉnh sửa chi tiêu' : 'Thêm chi tiêu' }}</h2>
+             <button @click="closeModal" class="close-button">&times;</button>
+           </div>
+           
+           <div class="modal-body">
+             <form @submit.prevent="addTransaction">
+               <div class="form-group">
+                 <label>Loại chi tiêu</label>
+                 <div class="radio-group">
+                   <label 
+                     class="radio-option" 
+                     :class="{ 'income': newTransaction.type === 'income' }"
+                   >
+                     <input 
+                       type="radio" 
+                       v-model="newTransaction.type" 
+                       value="income"
+                     />
+                     <span>Thu nhập</span>
+                   </label>
+                   <label 
+                     class="radio-option" 
+                     :class="{ 'expense': newTransaction.type === 'expense' }"
+                   >
+                     <input 
+                       type="radio" 
+                       v-model="newTransaction.type" 
+                       value="expense"
+                     />
+                     <span>Chi tiêu</span>
+                   </label>
+                 </div>
+               </div>
+               
+               <div class="form-group">
+                 <label>Số tiền (VND) <span class="required">*</span></label>
+                 <div class="amount-input">
+                   <input 
+                     type="text" 
+                     v-model="formattedAmount" 
+                     @input="formatAmount" 
+                     @blur="validateAmount"
+                     required 
+                     placeholder="0" 
+                   />
+                 </div>
+               </div>
+               
+               <div class="form-group">
+                 <label>Ngày</label>
+                 <input type="date" v-model="newTransaction.date" required />
+               </div>
+               
+               <div class="form-group">
+                 <label>Mô tả</label>
+                 <input type="text" v-model="newTransaction.description" />
+               </div>
+               
+               <div class="form-group">
+                 <label>Danh mục <span class="required">*</span></label>
+                 <div class="category-select">
+                   <select v-model="newTransaction.category" required>
+                     <option value="" disabled>Chọn danh mục</option>
+                     <optgroup v-if="newTransaction.type === 'income'" label="Thu nhập">
+                       <option v-for="cat in incomeCategories" :key="cat.id" :value="cat.id">
+                         {{ cat.name }}
+                       </option>
+                     </optgroup>
+                     <optgroup v-else label="Chi tiêu">
+                       <option v-for="cat in expenseCategories" :key="cat.id" :value="cat.id">
+                         {{ cat.name }}
+                       </option>
+                     </optgroup>
+                   </select>
+                   <button type="button" @click="openCategoryManager" class="manage-categories-icon" title="Quản lý danh mục">
+                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                       <circle cx="12" cy="12" r="3"></circle>
+                       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                     </svg>
+                   </button>
+                 </div>
+               </div>
+             </form>
+           </div>
+           
+           <div class="form-actions">
+             <button type="button" @click="closeModal" class="cancel-button">Hủy</button>
+             <button type="submit" @click="saveTransaction" class="submit-button" :disabled="modalLoading">
+               {{ modalLoading ? 'Đang xử lý...' : (isEditMode ? 'Cập nhật chi tiêu' : 'Lưu chi tiêu') }}
+             </button>
+           </div>
+         </div>
+       </div>
+     </Teleport>
 
     <!-- Category Manager Component -->
     <CategoryManager 
@@ -838,7 +840,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
 }
 
 .modal {

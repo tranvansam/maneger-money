@@ -51,39 +51,45 @@
       </main>
     </div>
     
-    <!-- Quick Add Modal for Mobile -->
-    <div v-if="showQuickAddModal" class="modal-overlay">
-      <div class="modal quick-add-modal">
-        <div class="modal-header">
-          <h2>Thêm nhanh</h2>
-          <button @click="showQuickAddModal = false" class="close-button">&times;</button>
-        </div>
-        
-        <div class="modal-body">
-          <div class="quick-action-grid">
-            <NuxtLink to="/transactions?action=add-transaction" @click="showQuickAddModal = false" class="quick-action-button">
-              <span class="quick-action-icon">💰</span>
-              <span>Thêm chi tiêu</span>
-            </NuxtLink>
-            
-            <NuxtLink to="/debts?action=add-debt&tab=owed" @click="showQuickAddModal = false" class="quick-action-button">
-              <span class="quick-action-icon">💸</span>
-              <span>Thêm khoản nợ</span>
-            </NuxtLink>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div v-if="showPrompt" class="notification-permission-modal-overlay">
-      <div class="notification-permission-modal">
-        <div class="modal-title">Bật thông báo</div>
-        <div class="modal-desc">Hãy bật thông báo để không bỏ lỡ các cập nhật mới!</div>
-        <div class="modal-actions">
-                     <button class="modal-btn accept" @click="requestNotificationPermission">Bật thông báo</button>
-          <button class="modal-btn close" @click="showPrompt = false">Đóng</button>
-        </div>
-      </div>
-    </div>
+         <!-- Quick Add Modal for Mobile -->
+     <Teleport to="body">
+       <div v-if="showQuickAddModal" class="modal-overlay">
+         <div class="modal quick-add-modal">
+           <div class="modal-header">
+             <h2>Thêm nhanh</h2>
+             <button @click="showQuickAddModal = false" class="close-button">&times;</button>
+           </div>
+           
+           <div class="modal-body">
+             <div class="quick-action-grid">
+               <NuxtLink to="/transactions?action=add-transaction" @click="showQuickAddModal = false" class="quick-action-button">
+                 <span class="quick-action-icon">💰</span>
+                 <span>Thêm chi tiêu</span>
+               </NuxtLink>
+               
+               <NuxtLink to="/debts?action=add-debt&tab=owed" @click="showQuickAddModal = false" class="quick-action-button">
+                 <span class="quick-action-icon">💸</span>
+                 <span>Thêm khoản nợ</span>
+               </NuxtLink>
+             </div>
+           </div>
+         </div>
+       </div>
+     </Teleport>
+     
+     <!-- Notification Permission Modal -->
+     <Teleport to="body">
+       <div v-if="showPrompt" class="notification-permission-modal-overlay">
+         <div class="notification-permission-modal">
+           <div class="modal-title">Bật thông báo</div>
+           <div class="modal-desc">Hãy bật thông báo để không bỏ lỡ các cập nhật mới!</div>
+           <div class="modal-actions">
+             <button class="modal-btn accept" @click="requestNotificationPermission">Bật thông báo</button>
+             <button class="modal-btn close" @click="showPrompt = false">Đóng</button>
+           </div>
+         </div>
+       </div>
+     </Teleport>
   </div>
 </template>
 
@@ -561,7 +567,8 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
 }
 
 .quick-add-modal {
@@ -637,10 +644,11 @@ body {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.25);
-  z-index: 2000;
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
+  backdrop-filter: blur(2px);
 }
 .notification-permission-modal {
   background: #fff;
