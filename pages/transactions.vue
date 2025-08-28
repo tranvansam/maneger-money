@@ -900,7 +900,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   box-sizing: border-box;
   width: 100%;
   min-height: 0;
-  max-height: calc(90vh - 140px); /* Trừ đi chiều cao của header và footer */
+  max-height: calc(90vh - 180px); /* Trừ đi chiều cao của header và footer (tăng thêm để tránh bị che) */
+  padding-bottom: 20px; /* Thêm padding bottom để tạo khoảng cách với footer */
 }
 
 .form-group {
@@ -1012,6 +1013,7 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   box-shadow: 0 -1px 5px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
   z-index: 10;
+  margin-top: auto; /* Đảm bảo footer luôn ở cuối */
 }
 
 .cancel-button {
@@ -1049,8 +1051,10 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
 
 @media (max-width: 768px) {
   .transactions-page {
-    padding: 10px;
+    padding: 5px;
     background-color: #f8f9fa;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   
   .page-title {
@@ -1092,9 +1096,10 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   
   .modal-body {
     padding: 16px;
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 160px); /* Tăng thêm để tránh bị footer che */
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    padding-bottom: 20px; /* Thêm padding bottom để tạo khoảng cách với footer */
   }
   
   .form-group {
