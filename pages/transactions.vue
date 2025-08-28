@@ -721,6 +721,9 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   position: relative;
   min-height: 100vh;
   background-color: #f8f9fa;
+  /* Fix cho iPhone có notch */
+  padding-top: env(safe-area-inset-top, 20px);
+  padding-bottom: env(safe-area-inset-bottom, 20px);
 }
 
 .page-title {
@@ -1056,6 +1059,11 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
     background-color: #f8f9fa;
     max-width: 100%;
     overflow-x: hidden;
+    /* Fix cho iPhone có notch */
+    padding-top: max(5px, env(safe-area-inset-top));
+    padding-bottom: max(5px, env(safe-area-inset-bottom));
+    padding-left: max(5px, env(safe-area-inset-left));
+    padding-right: max(5px, env(safe-area-inset-right));
   }
   
   .page-title {
@@ -1084,7 +1092,9 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
     border-radius: 12px;
     box-sizing: border-box;
     overflow: hidden;
-    max-height: calc(100vh - 40px); /* Tăng margin để tránh bị che bởi navigation bar */
+    max-height: calc(100vh - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); /* Tính toán safe area cho iPhone có notch */
+    margin-top: max(10px, env(safe-area-inset-top));
+    margin-bottom: max(10px, env(safe-area-inset-bottom));
   }
   
   .modal-header {
@@ -1097,7 +1107,7 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   
   .modal-body {
     padding: 16px;
-    max-height: calc(100vh - 200px); /* Tăng thêm để tránh bị footer che và navigation bar */
+    max-height: calc(100vh - 200px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); /* Tính toán safe area cho iPhone có notch */
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 30px; /* Tăng padding bottom để tạo khoảng cách lớn hơn với footer */

@@ -314,6 +314,11 @@ body {
 .app-layout {
   display: flex;
   min-height: 100vh;
+  /* Fix cho iPhone có notch */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .main-content {
@@ -333,6 +338,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
+  /* Fix cho iPhone có notch */
+  padding-top: max(0.5rem, env(safe-area-inset-top));
 }
 
 .menu-button {
@@ -502,10 +509,13 @@ body {
   padding: 1rem;
   padding-top: 30px;
   overflow-y: auto;
+  /* Fix cho iPhone có notch */
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
 
   @media (max-width: 768px) {
     padding: 10px;
     padding-top: 25px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
     width: 100%;
     max-width: 100%;
   }
@@ -606,7 +616,7 @@ body {
 }
 
 .has-mobile-nav {
-  padding-bottom: 60px;
+  padding-bottom: calc(60px + env(safe-area-inset-bottom));
 }
 
 .notification-permission-modal-overlay {
