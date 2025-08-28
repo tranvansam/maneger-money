@@ -338,8 +338,21 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  /* Fix cho iPhone có notch */
-  padding-top: max(0.5rem, env(safe-area-inset-top));
+  /* Fix cho iPhone có notch - tạo vùng màu nền phía trên */
+  margin-top: env(safe-area-inset-top);
+  padding-top: 0.5rem;
+}
+
+/* Tạo vùng màu nền phía trên header cho iPhone có notch */
+.app-header::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  background-color: white;
+  z-index: -1;
 }
 
 .menu-button {
@@ -525,6 +538,7 @@ body {
 @media (max-width: 768px) {
   .app-header {
     padding: 0.5rem;
+    margin-top: env(safe-area-inset-top);
   }
 
   .user-name {
