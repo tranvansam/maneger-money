@@ -843,7 +843,7 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   border-radius: 10px;
   width: 90%;
   max-width: 500px;
-  max-height: 90vh;
+  max-height: 85vh; /* Giảm từ 90vh xuống 85vh để tránh bị che */
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -900,8 +900,8 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   box-sizing: border-box;
   width: 100%;
   min-height: 0;
-  max-height: calc(90vh - 180px); /* Trừ đi chiều cao của header và footer (tăng thêm để tránh bị che) */
-  padding-bottom: 20px; /* Thêm padding bottom để tạo khoảng cách với footer */
+  max-height: calc(85vh - 200px); /* Giảm max-height và tăng thêm để tránh bị footer che */
+  padding-bottom: 30px; /* Tăng padding bottom để tạo khoảng cách lớn hơn với footer */
 }
 
 .form-group {
@@ -1014,6 +1014,7 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   flex-shrink: 0;
   z-index: 10;
   margin-top: auto; /* Đảm bảo footer luôn ở cuối */
+  min-height: 60px; /* Đảm bảo footer có chiều cao tối thiểu */
 }
 
 .cancel-button {
@@ -1083,7 +1084,7 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
     border-radius: 12px;
     box-sizing: border-box;
     overflow: hidden;
-    max-height: calc(100vh - 20px);
+    max-height: calc(100vh - 40px); /* Tăng margin để tránh bị che bởi navigation bar */
   }
   
   .modal-header {
@@ -1096,10 +1097,10 @@ watch([showAddTransactionModal, user], async ([isOpen, currentUser]) => {
   
   .modal-body {
     padding: 16px;
-    max-height: calc(100vh - 160px); /* Tăng thêm để tránh bị footer che */
+    max-height: calc(100vh - 200px); /* Tăng thêm để tránh bị footer che và navigation bar */
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 20px; /* Thêm padding bottom để tạo khoảng cách với footer */
+    padding-bottom: 30px; /* Tăng padding bottom để tạo khoảng cách lớn hơn với footer */
   }
   
   .form-group {
