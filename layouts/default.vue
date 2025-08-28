@@ -342,10 +342,9 @@ body {
   background-color: white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top);
   z-index: 100;
-  /* Fix cho iPhone có notch - tạo vùng màu nền phía trên */
-  margin-top: env(safe-area-inset-top);
+  /* Fix cho iPhone có notch - neo header dưới notch */
   padding-top: 0.5rem;
 }
 
@@ -544,7 +543,6 @@ body {
 @media (max-width: 768px) {
   .app-header {
     padding: 0.5rem;
-    margin-top: env(safe-area-inset-top);
   }
 
   .user-name {
