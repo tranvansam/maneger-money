@@ -280,6 +280,45 @@
       </div>
     </div>
 
+    <!-- Daily Overview Charts Section -->
+    <div v-if="quickFilter === 'month'" class="daily-overview-section">
+      
+      <DailyOverviewChart 
+        v-if="allTransactionsForCharts.length > 0"
+        :transactions="allTransactionsForCharts"
+        :is-loading="loading"
+        :start-date="startDate"
+        :end-date="endDate"
+      />
+      
+      <!-- Daily Stats Toggle Button -->
+      <div class="daily-stats-toggle">
+        <button @click="showDailyStats = !showDailyStats" class="toggle-button">
+          <span>{{ showDailyStats ? 'Ẩn' : 'Hiển thị' }} thống kê chi tiết</span>
+          <svg 
+            class="toggle-icon" 
+            :class="{ 'rotated': showDailyStats }"
+            width="16" height="16" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            stroke-width="2"
+          >
+            <polyline points="6,9 12,15 18,9"></polyline>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Daily Stats Section -->
+      <div v-if="showDailyStats" class="daily-stats-section">
+        <DailyStats 
+          :transactions="allTransactionsForCharts"
+          :start-date="startDate"
+          :end-date="endDate"
+        />
+      </div>
+    </div>
+
     <div v-if="loading" class="loading-state">
       <div class="loading-spinner"></div>
       <p>Đang tải dữ liệu...</p>
@@ -482,10 +521,13 @@ import { useAuth } from '~/composables/useAuth';
 import { onAuthStateChanged } from 'firebase/auth';
 import TransactionCalendar from '~/components/TransactionCalendar.vue';
 import MonthlyChart from '~/components/MonthlyChart.vue';
+import DailyOverviewChart from '~/components/DailyOverviewChart.vue';
+import DailyStats from '~/components/DailyStats.vue';
 
 const { user } = useAuth();
 const loading = ref(false);
 const transactions = ref([]);
+const allTransactionsForCharts = ref([]); // Tất cả transactions cho charts (không lọc theo type)
 const isInitialized = ref(false);
 const fetchError = ref(null);
 let authUnsubscribe = null;
@@ -504,6 +546,9 @@ const isToggleButtonClicked = ref(false);
 
 // State để quản lý hiển thị lịch chi tiêu
 const showCalendar = ref(false);
+
+// State để quản lý hiển thị thống kê chi tiết
+const showDailyStats = ref(false);
 
 // Touch/swipe state
 const touchStartX = ref(0);
@@ -972,13 +1017,10 @@ const setQuickFilter = (filter) => {
 
 // Custom date filter functions
 const toggleCustomDateFilter = () => {
-  console.log('toggleCustomDateFilter called, current state:', showCustomDateFilter.value);
-  
   // Set flag to prevent immediate closing
   isToggleButtonClicked.value = true;
   
   showCustomDateFilter.value = !showCustomDateFilter.value;
-  console.log('showCustomDateFilter is now:', showCustomDateFilter.value);
   
   if (showCustomDateFilter.value) {
     quickFilter.value = 'custom';
@@ -988,7 +1030,6 @@ const toggleCustomDateFilter = () => {
     threeMonthsAgo.setMonth(today.getMonth() - 3);
     startDate.value = formatDateForInput(threeMonthsAgo);
     endDate.value = formatDateForInput(today);
-    console.log('Set default dates:', startDate.value, 'to', endDate.value);
     // Tự động mở lịch khi chọn "Tùy chọn"
     showCalendar.value = true;
     // Navigate calendar to the start month of the selected range
@@ -1021,11 +1062,8 @@ const setCustomFilter = () => {
 };
 
 const applyCustomFilter = () => {
-  console.log('applyCustomFilter called');
-  
   // Validate dates
   if (!startDate.value || !endDate.value) {
-    console.error('Start date or end date is missing');
     alert('Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc');
     return;
   }
@@ -1034,13 +1072,11 @@ const applyCustomFilter = () => {
   const end = new Date(endDate.value);
   
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    console.error('Invalid date format');
     alert('Định dạng ngày không hợp lệ');
     return;
   }
   
   if (start > end) {
-    console.error('Start date cannot be after end date');
     alert('Ngày bắt đầu không thể sau ngày kết thúc');
     return;
   }
@@ -1050,7 +1086,6 @@ const applyCustomFilter = () => {
   showCalendar.value = true;
   // Ensure the filter is set to custom
   quickFilter.value = 'custom';
-  console.log('Applying custom filter with dates:', startDate.value, 'to', endDate.value);
   fetchTransactions();
   
   // Navigate calendar to the start month of the selected range
@@ -1186,10 +1221,7 @@ const showNotification = (message, type = 'success') => {
 
 // Add an external refresh method that can be called via ref
 const refreshData = async () => {
-  console.log("TransactionList refreshData called");
-
   if (!user.value || !user.value.uid) {
-    console.error("Cannot refresh: No authenticated user");
     fetchError.value = "Người dùng chưa được xác thực";
     loading.value = false;
     throw new Error("User not authenticated");
@@ -1197,23 +1229,17 @@ const refreshData = async () => {
 
   // If we're already loading, don't start another fetch
   if (loading.value) {
-    console.log("Already loading data, skipping duplicate fetch");
     return true; // Return true to indicate operation was "successful" (skipped)
   }
 
   // Đặt biến refreshInProgress để theo dõi quá trình refresh riêng biệt
   loading.value = true;
   fetchError.value = null;
-  console.log("Starting to fetch transactions in TransactionList");
 
   try {
     await fetchTransactions();
-    console.log("Data refreshed successfully in TransactionList");
-    console.log("Total Income:", totalIncome.value);
-    console.log("Total Expense:", totalExpense.value);
     return true; // Trả về true khi thành công để parent component biết
   } catch (error) {
-    console.error("Error refreshing data in TransactionList:", error);
     fetchError.value = "Lỗi khi tải lại dữ liệu: " + (error.message || "Không xác định");
     transactions.value = []; // Clear transactions on error to avoid showing stale data
     throw error; // Re-throw error to be caught by parent
@@ -1226,15 +1252,10 @@ const refreshData = async () => {
   // Lấy danh sách chi tiêu
 const fetchTransactions = async () => {
   if (!user.value || !user.value.uid) {
-    console.log("Không thể lấy chi tiêu: User chưa được xác thực");
     fetchError.value = "Người dùng chưa được xác thực";
     loading.value = false;
     return;
   }
-
-      console.log("Đang lấy chi tiêu cho user:", user.value.uid);
-  console.log("Khoảng thời gian:", startDate.value, "đến", endDate.value);
-      console.log("Loại chi tiêu:", transactionType.value);
 
   // Đảm bảo không set loading khi đã đang loading
   if (!loading.value) {
@@ -1250,10 +1271,7 @@ const fetchTransactions = async () => {
     const end = new Date(endDate.value);
     end.setHours(23, 59, 59, 999); // Đặt thời gian kết thúc đến cuối ngày
 
-    console.log("Truy vấn Firestore từ", start.toISOString(), "đến", end.toISOString());
-
     let collectionPath = `users/${user.value.uid}/transactions`;
-    console.log("Collection path:", collectionPath);
 
     // Chuyển đổi đối tượng Date thành đối tượng Timestamp của Firestore
     const startTimestamp = Timestamp.fromDate(start);
@@ -1267,9 +1285,8 @@ const fetchTransactions = async () => {
     );
 
     const querySnapshot = await getDocs(q);
-    console.log("Số lượng kết quả nhận được:", querySnapshot.size);
 
-    let results = [];
+    let allResults = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
 
@@ -1300,13 +1317,9 @@ const fetchTransactions = async () => {
       // Đảm bảo type là một chuỗi hợp lệ
       const type = ['income', 'expense'].includes(data.type) ? data.type : 'expense';
 
-              console.log(`Chi tiêu [${doc.id}]: ${type}, ${amount}đ, ${date.toISOString()}`);
-      console.log(`  - Trong khoảng thời gian: ${date >= start && date <= end}`);
-      console.log(`  - So sánh ngày: ${date.getDate()}/${date.getMonth() + 1} với ${start.getDate()}/${start.getMonth() + 1} và ${end.getDate()}/${end.getMonth() + 1}`);
-
       // Thêm vào kết quả mà không cần kiểm tra lại khoảng thời gian
       // vì Firestore query đã xử lý điều này
-      results.push({
+      allResults.push({
         id: doc.id,
         ...data,
         date: date,
@@ -1315,21 +1328,21 @@ const fetchTransactions = async () => {
       });
     });
 
-    // Lọc theo loại nếu cần
+    // Sắp xếp lại theo ngày mới nhất trước
+    allResults.sort((a, b) => b.date - a.date);
+
+    // Lưu tất cả transactions cho charts (không lọc theo type)
+    allTransactionsForCharts.value = allResults;
+
+    // Lọc theo loại nếu cần cho danh sách hiển thị
+    let filteredResults = allResults;
     if (transactionType.value !== 'all') {
-      const beforeCount = results.length;
-      results = results.filter(t => t.type === transactionType.value);
-              console.log(`Đã lọc theo loại ${transactionType.value}: ${beforeCount} -> ${results.length} chi tiêu`);
+      filteredResults = allResults.filter(t => t.type === transactionType.value);
     }
 
-          console.log("Tổng số chi tiêu sau khi lọc:", results.length);
-
-    // Sắp xếp lại theo ngày mới nhất trước
-    results.sort((a, b) => b.date - a.date);
-
     // Cập nhật transactions chỉ khi cần thiết
-    if (JSON.stringify(transactions.value) !== JSON.stringify(results)) {
-      transactions.value = results;
+    if (JSON.stringify(transactions.value) !== JSON.stringify(filteredResults)) {
+      transactions.value = filteredResults;
     }
   } catch (error) {
     console.error('Lỗi khi lấy chi tiêu:', error);
@@ -1338,6 +1351,7 @@ const fetchTransactions = async () => {
     }
     fetchError.value = `Không thể tải dữ liệu chi tiêu: ${error.message || 'Lỗi không xác định'}`;
     transactions.value = []; // Đặt lại transactions để tránh hiển thị dữ liệu cũ
+    allTransactionsForCharts.value = []; // Đặt lại allTransactionsForCharts
   } finally {
     loading.value = false;
     isInitialized.value = true;
@@ -1355,14 +1369,9 @@ const resetToToday = () => {
   const today = new Date();
   // Đảm bảo rằng chúng ta lấy ngày hiện tại đầy đủ
   today.setHours(0, 0, 0, 0);
-  console.log("Đặt lại thành hôm nay:", today.toISOString());
 
   startDate.value = formatDateForInput(today);
   endDate.value = formatDateForInput(today);
-
-  // Ghi log để debug
-  console.log("startDate:", startDate.value);
-  console.log("endDate:", endDate.value);
 
   // Đợi một tick trước khi fetch để đảm bảo giá trị đã được cập nhật
   nextTick(() => {
@@ -1431,7 +1440,6 @@ const fetchCategories = async () => {
 
 // Thêm gọi fetchCategories trong onMounted
 onMounted(async () => {
-  console.log("TransactionList mounted");
   await fetchCategories();
 
   // Setup auth listener
@@ -1485,10 +1493,8 @@ onMounted(async () => {
 
 // Đảm bảo unsubscribe khi component unmounted
 onUnmounted(() => {
-  console.log("TransactionList unmounted, cleaning up");
   if (authUnsubscribe) {
     authUnsubscribe();
-    console.log("Auth listener unsubscribed");
   }
   
   // Cleanup dropdown event listeners
@@ -1501,8 +1507,6 @@ onUnmounted(() => {
 // Sử dụng watcher để đảm bảo fetchTransactions chỉ được gọi khi user đã được tải
 // Removed immediate flag to prevent duplicate fetch
 watch(user, async (newUser, oldUser) => {
-  console.log("User changed in watcher:", newUser?.uid);
-
   // Chỉ gọi fetch khi:
   // 1. Có user mới (newUser)
   // 2. User mới khác user cũ
@@ -1515,13 +1519,10 @@ watch(user, async (newUser, oldUser) => {
     !isInitialized.value &&
     !loading.value
   ) {
-    console.log("User changed significantly, re-fetching transactions");
     loading.value = true;
     try {
       await fetchTransactions();
-      console.log("Data loaded via user watcher");
     } catch (error) {
-      console.error("Error loading data in user watcher:", error);
       fetchError.value = "Lỗi khi tải dữ liệu: " + (error.message || "Không xác định");
       transactions.value = []; // Clear any partial data
     } finally {
@@ -1535,13 +1536,11 @@ watch(user, async (newUser, oldUser) => {
 watch([startDate, endDate, transactionType], async (newValues, oldValues) => {
   // Skip if we're already loading or not initialized
   if (loading.value || !isInitialized.value) {
-    console.log("Skipping filter change refresh during loading/initialization");
     return;
   }
 
   // Chỉ refresh khi giá trị thực sự thay đổi và người dùng đã đăng nhập
   if (user.value && user.value.uid) {
-    console.log("Filter changed, refreshing data");
     await fetchTransactions();
   }
 }, { deep: true });
@@ -2184,6 +2183,53 @@ onUnmounted(() => {
   }
 }
 
+/* Daily Overview Section */
+.daily-overview-section {
+  margin-bottom: 20px;
+}
+
+.daily-stats-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.toggle-button:hover {
+  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-icon {
+  transition: transform 0.3s ease;
+  color: #666;
+}
+
+.toggle-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.daily-stats-section {
+  margin-top: 20px;
+  animation: slideDown 0.3s ease-out;
+}
+
 /* Monthly Overview Table Styles */
 .monthly-overview-section {
   background: white;
@@ -2705,6 +2751,15 @@ onUnmounted(() => {
     width: 100%;
     max-width: 100%;
     overflow: hidden;
+  }
+  
+  .daily-stats-toggle {
+    margin: 16px 0;
+  }
+  
+  .toggle-button {
+    padding: 10px 16px;
+    font-size: 13px;
   }
   
   .chart-wrapper-outer {
